@@ -33,7 +33,8 @@
 #include "sync-lsdj.h"
 
 #include <mgba-util/audio-buffer.h>
-#include <mgba-util/audio-resampler.h>
+
+#include "gba-audio-rate.h"
 
 #define GB_SAMPLES 512
 /* An alpha factor of 1/180 is *somewhat* equivalent
@@ -96,9 +97,9 @@ static bool gameRunning = false;
  * reinitialise audio/video with SET_SYSTEM_AV_INFO whenever a game changes
  * SOUNDBIAS. On mali-fbdev (TrimUI Brick) that reinit fails to recreate the
  * EGL surface and RetroArch exits. */
-#define GBA_FIXED_AUDIO_RATE 65536
-static struct mAudioResampler gbaResampler;
-static struct mAudioBuffer gbaResampled;
+static struct GBAFixedRate gbaFixedRate;
+static int16_t* gbaRawBuffer = NULL;
+static size_t gbaRawBufferFrames = 0;
 static bool gbaResamplerActive = false;
 #endif
 
@@ -782,18 +783,19 @@ void retro_run(void) {
 #ifdef M_CORE_GBA
 	if (core->platform(core) == mPLATFORM_GBA) {
 		struct mAudioBuffer *buffer = core->getAudioBuffer(core);
-		if (gbaResamplerActive) {
-			mAudioResamplerSetSource(&gbaResampler, buffer, core->audioSampleRate(core), true);
-			mAudioResamplerProcess(&gbaResampler);
-			buffer = &gbaResampled;
-		}
 		size_t samplesAvail = mAudioBufferAvailable(buffer);
 		if (samplesAvail > 0) {
-			if (audioSampleBufferSize < samplesAvail * 2) {
-				audioSampleBufferSize = samplesAvail * 2;
+			/* output can be up to twice the input (32768 Hz -> 65536 Hz) */
+			if (audioSampleBufferSize < samplesAvail * 4) {
+				audioSampleBufferSize = samplesAvail * 4;
 				audioSampleBuffer     = realloc(audioSampleBuffer, audioSampleBufferSize * sizeof(int16_t));
 			}
-			int produced = mAudioBufferRead(buffer, audioSampleBuffer, samplesAvail);
+			if (gbaRawBufferFrames < samplesAvail) {
+				gbaRawBufferFrames = samplesAvail;
+				gbaRawBuffer = realloc(gbaRawBuffer, gbaRawBufferFrames * 2 * sizeof(int16_t));
+			}
+			size_t got = mAudioBufferRead(buffer, gbaRawBuffer, samplesAvail);
+			int produced = (int) GBAFixedRateConvert(&gbaFixedRate, gbaRawBuffer, got, core->audioSampleRate(core), audioSampleBuffer);
 			if (produced > 0) {
 				if (audioLowPassEnabled) {
 					_audioLowPassFilter(audioSampleBuffer, produced);
@@ -1053,9 +1055,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 		 * coded blip buffer limit of 0x4000). */
 		/* Games may raise the output rate up to 262144 Hz via SOUNDBIAS */
 		core->setAudioBufferSize(core, 0x4000);
-		mAudioBufferInit(&gbaResampled, 0x4000, 2);
-		mAudioResamplerInit(&gbaResampler, mINTERPOLATOR_COSINE);
-		mAudioResamplerSetDestination(&gbaResampler, &gbaResampled, GBA_FIXED_AUDIO_RATE);
+		GBAFixedRateReset(&gbaFixedRate);
 		gbaResamplerActive = true;
 	} else
 	#endif
@@ -1181,8 +1181,9 @@ void retro_unload_game(void) {
 #endif
 #ifdef M_CORE_GBA
 	if (gbaResamplerActive) {
-		mAudioResamplerDeinit(&gbaResampler);
-		mAudioBufferDeinit(&gbaResampled);
+		free(gbaRawBuffer);
+		gbaRawBuffer = NULL;
+		gbaRawBufferFrames = 0;
 		gbaResamplerActive = false;
 	}
 #endif
