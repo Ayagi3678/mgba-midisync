@@ -27,6 +27,7 @@
 #include <mgba-util/vfs.h>
 
 #include "libretro_core_options.h"
+#include "midisync.h"
 
 #define GB_SAMPLES 512
 /* An alpha factor of 1/180 is *somewhat* equivalent
@@ -66,6 +67,10 @@ static int32_t _readTiltY(struct mRotationSource* source);
 static int32_t _readGyroZ(struct mRotationSource* source);
 
 static struct mCore* core;
+#ifdef M_CORE_GBA
+static struct GBASIOMidiSync midiSync;
+static bool midiSyncAttached = false;
+#endif
 static mColor* outputBuffer = NULL;
 static int16_t *audioSampleBuffer = NULL;
 static size_t audioSampleBufferSize;
@@ -550,6 +555,12 @@ void retro_run(void) {
 
 	inputPollCallback();
 
+#ifdef M_CORE_GBA
+	if (midiSyncAttached) {
+		GBASIOMidiSyncEnsureRunning(&midiSync);
+	}
+#endif
+
 	bool updated = false;
 	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated) {
 		envVarsUpdated = true;
@@ -937,6 +948,9 @@ bool retro_load_game(const struct retro_game_info* game) {
 	if (core->platform(core) == mPLATFORM_GBA) {
 		core->setPeripheral(core, mPERIPH_GBA_LUMINANCE, &lux);
 		biosName = "gba_bios.bin";
+		GBASIOMidiSyncCreate(&midiSync);
+		core->setPeripheral(core, mPERIPH_GBA_LINK_PORT, &midiSync.d);
+		midiSyncAttached = true;
 
 	}
 #endif
@@ -999,6 +1013,9 @@ void retro_unload_game(void) {
 		return;
 	}
 	mCoreConfigDeinit(&core->config);
+#ifdef M_CORE_GBA
+	midiSyncAttached = false;
+#endif
 	core->deinit(core);
 	mappedMemoryFree(data, dataSize);
 	data = 0;
