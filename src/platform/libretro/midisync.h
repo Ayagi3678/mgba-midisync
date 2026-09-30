@@ -22,6 +22,7 @@ struct GBASIOMidiSync {
 	char devPath[128];
 	int clockDiv;
 	int clockCount;
+	int leadTicks;
 	bool outEnabled;
 	bool logEnabled;
 	FILE* log;

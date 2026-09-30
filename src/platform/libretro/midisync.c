@@ -14,6 +14,8 @@
  *   clock_div=1                (send one 01 per N incoming F8)
  *   out=1                      (0 disables MIDI output)
  *   log=1                      (0 disables the log file)
+ *   lead_ticks=0               (on start, send N extra ticks at once so FMS
+ *                               runs N clocks ahead to cancel audio latency)
  *
  * Log: /userdata/system/logs/mgba-midisync.log (falls back to /tmp)
  *
@@ -107,6 +109,9 @@ static void _loadConfig(struct GBASIOMidiSync* m) {
 			m->clockDiv = div > 0 ? div : 1;
 		} else if (!strcmp(key, "out")) {
 			m->outEnabled = atoi(value) != 0;
+		} else if (!strcmp(key, "lead_ticks")) {
+			int lead = atoi(value);
+			m->leadTicks = lead > 0 ? (lead > 24 ? 24 : lead) : 0;
 		} else if (!strcmp(key, "log")) {
 			m->logEnabled = atoi(value) != 0;
 		}
@@ -191,12 +196,19 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 		}
 		break;
 	case 0xFA:
-	case 0xFB:
+	case 0xFB: {
+		/* Clocks received while stopped are stale; start from a clean slate */
+		m->head = m->tail = 0;
 		m->clockCount = 0;
 		m->clocksIn = 0;
 		_queuePush(m, 0x02);
-		_log(m, "in: %s", byte == 0xFA ? "start" : "continue");
+		int i;
+		for (i = 0; i < m->leadTicks; ++i) {
+			_queuePush(m, 0x01);
+		}
+		_log(m, "in: %s (lead %d)", byte == 0xFA ? "start" : "continue", m->leadTicks);
 		break;
+	}
 	case 0xFC:
 		_queuePush(m, 0x03);
 		_log(m, "in: stop after %u clocks", m->clocksIn);
@@ -262,7 +274,7 @@ static bool _init(struct GBASIODriver* driver) {
 			m->log = fopen(LOG_FALLBACK, "w");
 		}
 	}
-	_log(m, "mgba-midisync: clock_div=%d out=%d device=%s", m->clockDiv, m->outEnabled, m->devPath[0] ? m->devPath : "(auto)");
+	_log(m, "mgba-midisync: clock_div=%d lead_ticks=%d out=%d device=%s", m->clockDiv, m->leadTicks, m->outEnabled, m->devPath[0] ? m->devPath : "(auto)");
 	_openDevice(m);
 	if (m->fd < 0) {
 		_log(m, "no MIDI device yet, will retry");
