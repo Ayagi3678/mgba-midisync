@@ -113,7 +113,7 @@ RetroArch on mali-fbdev.
 sudo apt install cmake gcc-aarch64-linux-gnu g++-aarch64-linux-gnu zip
 scripts/build-aarch64.sh            # -> dist/mgba-midisync-<version>-aarch64.zip
 ```
-GitHub Actions builds the same package for every push and attaches it to a release for `v*` tags.
+GitHub Actions builds the same package for every push; publishing a GitHub release (tag `vX.Y.Z`) builds it again and attaches the zip to the release.
 
 ## Credits
 - [mGBA](https://mgba.io) by endrift and contributors (MPL-2.0) — this project keeps the same license.
