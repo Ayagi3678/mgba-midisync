@@ -81,6 +81,61 @@ static bool midiSyncAttached = false;
 static struct mAudioResampler gbaResampler;
 static struct mAudioBuffer gbaResampled;
 static bool gbaResamplerActive = false;
+
+static void _loadMidiSyncOptions(void) {
+	double offset = 0, outDelay = 20;
+	bool pace = true;
+	struct retro_variable var = { .key = "mgba_midisync_offset_ms", .value = 0 };
+	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		offset = strtod(var.value, NULL);
+	}
+	var.key = "mgba_midisync_out_delay_ms";
+	var.value = 0;
+	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		outDelay = strtod(var.value, NULL);
+	}
+	var.key = "mgba_midisync_pace";
+	var.value = 0;
+	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		pace = strcmp(var.value, "disabled") != 0;
+	}
+	GBASIOMidiSyncSetOptions(&midiSync, offset, outDelay, pace);
+}
+
+static bool _containsFMS(const char* s) {
+	size_t i;
+	for (i = 0; s && s[i] && s[i + 1] && s[i + 2]; ++i) {
+		if ((s[i] == 'F' || s[i] == 'f') && (s[i + 1] == 'M' || s[i + 1] == 'm') && (s[i + 2] == 'S' || s[i + 2] == 's')) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool _wantMidiSync(const char* path) {
+	const char* mode = "auto";
+	struct retro_variable var = { .key = "mgba_midisync_mode", .value = 0 };
+	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		mode = var.value;
+	}
+	if (strcmp(mode, "enabled") == 0) {
+		return true;
+	}
+	if (strcmp(mode, "disabled") == 0) {
+		return false;
+	}
+	struct mGameInfo info;
+	memset(&info, 0, sizeof(info));
+	core->getGameInfo(core, &info);
+	if (_containsFMS(info.title)) {
+		return true;
+	}
+	if (path) {
+		const char* base = strrchr(path, '/');
+		return _containsFMS(base ? base + 1 : path);
+	}
+	return false;
+}
 #endif
 static mColor* outputBuffer = NULL;
 static int16_t *audioSampleBuffer = NULL;
@@ -591,6 +646,11 @@ void retro_run(void) {
 		}
 
 		_loadAudioLowPassFilterSettings();
+#ifdef M_CORE_GBA
+		if (midiSyncAttached) {
+			_loadMidiSyncOptions();
+		}
+#endif
 		var.key = "mgba_frameskip";
 		var.value = 0;
 		if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
@@ -967,9 +1027,12 @@ bool retro_load_game(const struct retro_game_info* game) {
 	if (core->platform(core) == mPLATFORM_GBA) {
 		core->setPeripheral(core, mPERIPH_GBA_LUMINANCE, &lux);
 		biosName = "gba_bios.bin";
-		GBASIOMidiSyncCreate(&midiSync);
-		core->setPeripheral(core, mPERIPH_GBA_LINK_PORT, &midiSync.d);
-		midiSyncAttached = true;
+		if (_wantMidiSync(game->path)) {
+			GBASIOMidiSyncCreate(&midiSync);
+			core->setPeripheral(core, mPERIPH_GBA_LINK_PORT, &midiSync.d);
+			midiSyncAttached = true;
+			_loadMidiSyncOptions();
+		}
 
 	}
 #endif

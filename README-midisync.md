@@ -17,14 +17,22 @@ Changes (all in `src/platform/libretro/`):
   `SET_SYSTEM_AV_INFO` (RetroArch on mali-fbdev dies re-creating the EGL surface when FMS changes SOUNDBIAS)
 - `glibc-compat.c` – keeps the .so loadable on glibc < 2.38
 
-## Config: `/userdata/system/configs/mgba-midisync.cfg`
+## Settings
+
+In RetroArch: **Quick Menu → Core Options → MIDI Sync (FMS)**
+
+| Option | Default | |
+|---|---|---|
+| MIDI Sync (Restart) | Auto (FMS only) | `Auto` enables the bridge only when the ROM title or file name contains "FMS"; every other game runs as plain mGBA. `Always` / `Disabled` force it. |
+| Offset (FMS Sync In) | 0 ms | FMS follows MIDI clock: `+` plays earlier, `-` later. Cancels the emulator's audio latency. Applies from the next MIDI start. The first beat after start can't be pulled earlier. |
+| Clock Out Delay (FMS Sync Out) | 20 ms | FMS leads: delay before each MIDI clock is sent. Set it to the audio latency so external gear lines up from the first beat. |
+| Real-Time Pacing | On | Skips a frame whenever emulation gets a frame ahead of real time (RetroArch's 60 Hz vsync runs GBA ~0.5% fast, so FMS would drift behind MIDI clock). |
+
+Advanced (optional) `/userdata/system/configs/mgba-midisync.cfg`, re-read about once a second:
 ```
 device=/dev/snd/midiC1D0   # default: first non-card-0 rawmidi device
-offset_ms=0                # fine trim: + FMS earlier, - later; re-read ~1/s, applies at next start
 clock_div=1                # one 01 per N incoming F8
-lead_ticks=0               # -24..24: + runs FMS N clocks ahead, - holds its start back N clocks
-pace=1                     # keep emulation at real time by occasionally skipping a frame
-out_delay_ms=20            # MIDI out sent on a real-time schedule this long after generation
+lead_ticks=0               # -24..24 extra / withheld ticks at start
 in=1
 out=1
 log=1                      # /userdata/system/logs/mgba-midisync.log

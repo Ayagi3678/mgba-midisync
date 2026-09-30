@@ -28,6 +28,7 @@ struct GBASIOMidiSync {
 	bool outEnabled;
 	bool inEnabled;
 	bool logEnabled;
+	bool ignoredKeys;
 	bool paceEnabled;
 	double paceBase;
 	uint64_t paceFrames;
@@ -69,6 +70,8 @@ void GBASIOMidiSyncEnsureRunning(struct GBASIOMidiSync* m);
 /* Call before running a frame; returns false if this frame should be skipped
  * to keep emulated time in step with real time */
 bool GBASIOMidiSyncPaceFrame(struct GBASIOMidiSync* m, double frameSeconds);
+/* Timing options (from libretro core options) */
+void GBASIOMidiSyncSetOptions(struct GBASIOMidiSync* m, double offsetMs, double outDelayMs, bool pace);
 /* Feed a raw MIDI byte directly (used for testing) */
 void GBASIOMidiSyncInjectMidi(struct GBASIOMidiSync* m, uint8_t byte);
 

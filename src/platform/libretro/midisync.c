@@ -9,24 +9,16 @@
  *   OUT (FMS Sync = Out, internal clock): translates the byte FMS sends
  *       back into MIDI (01 -> F8, 02 -> FA, 03 -> FC) and writes it out.
  *
- * Config (optional): /userdata/system/configs/mgba-midisync.cfg
+ * Timing options are libretro core options (Quick Menu > Core Options >
+ * MIDI Sync): offset (Sync In), clock out delay (Sync Out), real-time pacing.
+ *
+ * Advanced config (optional): /userdata/system/configs/mgba-midisync.cfg
  *   device=/dev/snd/midiC1D0   (default: first /dev/snd/midiC*D0 found, skipping card 0)
  *   clock_div=1                (send one 01 per N incoming F8)
- *   out=1                      (0 disables MIDI output)
+ *   lead_ticks=0               (-24..24 extra/withheld ticks at start)
+ *   in=1 / out=1               (0 disables that direction)
  *   log=1                      (0 disables the log file)
- *   pace=1                     (keep emulation at exactly real time; RetroArch
- *                               vsync otherwise runs it ~0.5-1% fast, which
- *                               makes FMS drift behind the MIDI clock)
- *   out_delay_ms=20            (MIDI out is sent on a steady real-time
- *                               schedule this long after it was generated,
- *                               instead of in per-frame bursts)
- *   offset_ms=0                (fine timing trim. Positive: FMS plays earlier,
- *                               negative: later. Re-read from the file about
- *                               once a second; applies from the next start)
- *   lead_ticks=0               (-24..24. Positive: on start, send N extra
- *                               ticks at once so FMS runs N clocks ahead.
- *                               Negative: hold FMS's start back N clocks.
- *                               runs N clocks ahead to cancel audio latency)
+ *   The file is re-read about once a second.
  *
  * Log: /userdata/system/logs/mgba-midisync.log (falls back to /tmp)
  *
@@ -154,12 +146,8 @@ static void _loadConfig(struct GBASIOMidiSync* m) {
 			m->outEnabled = atoi(value) != 0;
 		} else if (!strcmp(key, "in")) {
 			m->inEnabled = atoi(value) != 0;
-		} else if (!strcmp(key, "out_delay_ms")) {
-			m->outDelayMs = atof(value);
-		} else if (!strcmp(key, "pace")) {
-			m->paceEnabled = atoi(value) != 0;
-		} else if (!strcmp(key, "offset_ms")) {
-			m->offsetMs = atof(value);
+		} else if (!strcmp(key, "offset_ms") || !strcmp(key, "out_delay_ms") || !strcmp(key, "pace")) {
+			m->ignoredKeys = true;
 		} else if (!strcmp(key, "lead_ticks")) {
 			int lead = atoi(value);
 			m->leadTicks = lead > 24 ? 24 : (lead < -24 ? -24 : lead);
@@ -448,11 +436,10 @@ static void _pollEvent(struct mTiming* timing, void* context, uint32_t cyclesLat
 		if (stat(CONFIG_PATH, &st) == 0 && st.st_mtime != m->configMtime) {
 			m->configMtime = st.st_mtime;
 			/* keys removed from the file fall back to their defaults */
-			m->offsetMs = 0;
 			m->leadTicks = 0;
 			m->clockDiv = 1;
 			_loadConfig(m);
-			_log(m, "config reloaded: offset_ms=%.1f lead_ticks=%d", m->offsetMs, m->leadTicks);
+			_log(m, "config reloaded: lead_ticks=%d clock_div=%d", m->leadTicks, m->clockDiv);
 		}
 	}
 	if (m->fd < 0) {
@@ -519,7 +506,10 @@ static bool _init(struct GBASIODriver* driver) {
 			m->log = fopen(LOG_FALLBACK, "w");
 		}
 	}
-	_log(m, "mgba-midisync: offset_ms=%.1f clock_div=%d lead_ticks=%d pace=%d out=%d out_delay_ms=%.1f device=%s", m->offsetMs, m->clockDiv, m->leadTicks, m->paceEnabled, m->outEnabled, m->outDelayMs, m->devPath[0] ? m->devPath : "(auto)");
+	_log(m, "mgba-midisync: clock_div=%d lead_ticks=%d in=%d out=%d device=%s", m->clockDiv, m->leadTicks, m->inEnabled, m->outEnabled, m->devPath[0] ? m->devPath : "(auto)");
+	if (m->ignoredKeys) {
+		_log(m, "note: offset_ms / out_delay_ms / pace in the .cfg are ignored now; set them in Quick Menu > Core Options > MIDI Sync");
+	}
 	_openDevice(m);
 	if (m->fd < 0) {
 		_log(m, "no MIDI device yet, will retry");
@@ -698,4 +688,17 @@ bool GBASIOMidiSyncPaceFrame(struct GBASIOMidiSync* m, double frameSeconds) {
 	UNUSED(frameSeconds);
 	return true;
 #endif
+}
+
+void GBASIOMidiSyncSetOptions(struct GBASIOMidiSync* m, double offsetMs, double outDelayMs, bool pace) {
+	bool changed = m->offsetMs != offsetMs || m->outDelayMs != outDelayMs || m->paceEnabled != pace;
+	m->offsetMs = offsetMs;
+	m->outDelayMs = outDelayMs;
+	if (m->paceEnabled != pace) {
+		m->paceEnabled = pace;
+		m->paceValid = false;
+	}
+	if (changed) {
+		_log(m, "options: offset %.0fms, clock out delay %.0fms, pacing %s", offsetMs, outDelayMs, pace ? "on" : "off");
+	}
 }
