@@ -89,6 +89,15 @@ static void _handleMidiByte(struct GBSIOLSDjSync* m, uint8_t byte) {
 	}
 }
 
+static void _dumpOutHistory(struct GBSIOLSDjSync* m) {
+	unsigned n = m->outHistCount < LSDJ_OUT_HISTORY ? m->outHistCount : LSDJ_OUT_HISTORY;
+	unsigned i;
+	for (i = 0; i < n; ++i) {
+		unsigned idx = (m->outHistCount - n + i) % LSDJ_OUT_HISTORY;
+		MidiHostLog(&m->host, "  out byte %02X  +%.2fms", m->outHistByte[idx], m->outHistDt[idx]);
+	}
+}
+
 static void _checkOutStop(struct GBSIOLSDjSync* m) {
 	if (!m->outStarted) {
 		return;
@@ -102,7 +111,8 @@ static void _checkOutStop(struct GBSIOLSDjSync* m) {
 		m->outStarted = false;
 		/* place the stop one tick after the last clock */
 		MidiHostSend(&m->host, 0xFC, m->lastOutEmu + (m->outTickMs > 0 ? m->outTickMs : 20));
-		MidiHostLog(&m->host, "out: stop after %u clocks", m->clocksOut);
+		MidiHostLog(&m->host, "out: stop after %u clocks (tick %.2fms), last bytes from LSDj:", m->clocksOut, m->outTickMs);
+		_dumpOutHistory(m);
 	}
 }
 
@@ -199,6 +209,12 @@ static uint8_t _writeSC(struct GBSIODriver* driver, uint8_t value) {
 		if (dt > 0 && dt < 250) {
 			m->outTickMs = m->outTickMs > 0 ? m->outTickMs * 0.9 + dt * 0.1 : dt;
 		}
+	}
+	{
+		unsigned idx = m->outHistCount % LSDJ_OUT_HISTORY;
+		m->outHistByte[idx] = sent;
+		m->outHistDt[idx] = m->clocksOut ? now - m->lastOutEmu : 0;
+		++m->outHistCount;
 	}
 	m->lastOutEmu = now;
 	MidiHostSend(&m->host, 0xF8, now);

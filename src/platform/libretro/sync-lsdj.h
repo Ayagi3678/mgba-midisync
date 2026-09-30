@@ -33,6 +33,10 @@ struct GBSIOLSDjSync {
 	double lastOutEmu;
 	double outTickMs;
 	unsigned clocksOut;
+#define LSDJ_OUT_HISTORY 24
+	uint8_t outHistByte[LSDJ_OUT_HISTORY];
+	double outHistDt[LSDJ_OUT_HISTORY];
+	unsigned outHistCount;
 
 	struct mTimingEvent pollEvent;
 	struct mTimingEvent deliverEvent;
