@@ -36,6 +36,9 @@ struct GBASIOMidiSync {
 	unsigned clocksIn;
 	unsigned clocksOut;
 	unsigned dropped;
+	unsigned delivered;
+	double startReal;
+	double startEmu;
 	unsigned reopenCounter;
 
 	struct mTimingEvent pollEvent;

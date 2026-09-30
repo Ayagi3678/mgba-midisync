@@ -37,6 +37,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <glob.h>
+#include <time.h>
 #include <unistd.h>
 #define MIDISYNC_ENABLED 1
 #endif
@@ -62,6 +63,28 @@ static void _log(struct GBASIOMidiSync* m, const char* fmt, ...) {
 	va_end(args);
 	fputc('\n', m->log);
 	fflush(m->log);
+}
+
+static unsigned _queueDepth(const struct GBASIOMidiSync* m) {
+	return (m->tail + MIDISYNC_QUEUE_SIZE - m->head) % MIDISYNC_QUEUE_SIZE;
+}
+
+static double _realMs(void) {
+#ifdef MIDISYNC_ENABLED
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+#else
+	return 0;
+#endif
+}
+
+static double _emuMs(struct GBASIOMidiSync* m) {
+	if (!m->d.p || !m->d.p->p) {
+		return 0;
+	}
+	struct GBA* gba = m->d.p->p;
+	return mTimingGlobalTime(&gba->timing) * 1000.0 / GBA_ARM7TDMI_FREQUENCY;
 }
 
 static bool _queuePush(struct GBASIOMidiSync* m, uint8_t byte) {
@@ -192,7 +215,10 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 			_queuePush(m, 0x01);
 		}
 		if (m->clocksIn % 96 == 0) {
-			_log(m, "in: %u clocks, dropped %u", m->clocksIn, m->dropped);
+			double real = _realMs() - m->startReal;
+			double emu = _emuMs(m) - m->startEmu;
+			_log(m, "in: %u clocks, delivered %u, queued %u, dropped %u, real %.0fms emu %.0fms (%.3fx)",
+			     m->clocksIn, m->delivered, _queueDepth(m), m->dropped, real, emu, real > 0 ? emu / real : 0);
 		}
 		break;
 	case 0xFA:
@@ -201,6 +227,9 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 		m->head = m->tail = 0;
 		m->clockCount = 0;
 		m->clocksIn = 0;
+		m->delivered = 0;
+		m->startReal = _realMs();
+		m->startEmu = _emuMs(m);
 		_queuePush(m, 0x02);
 		int i;
 		for (i = 0; i < m->leadTicks; ++i) {
@@ -255,6 +284,7 @@ static void _deliverEvent(struct mTiming* timing, void* context, uint32_t cycles
 	}
 	uint8_t byte = _queuePop(m);
 	m->armed = false;
+	++m->delivered;
 	GBASIONormal8FinishTransfer(m->d.p, byte, cyclesLate);
 	/* FMS re-arms from its IRQ handler; anything still queued goes next time */
 }
