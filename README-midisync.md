@@ -20,6 +20,7 @@ Changes (all in `src/platform/libretro/`):
 ## Config: `/userdata/system/configs/mgba-midisync.cfg`
 ```
 device=/dev/snd/midiC1D0   # default: first non-card-0 rawmidi device
+offset_ms=0                # fine trim: + FMS earlier, - later; re-read ~1/s, applies at next start
 clock_div=1                # one 01 per N incoming F8
 lead_ticks=0               # -24..24: + runs FMS N clocks ahead, - holds its start back N clocks
 pace=1                     # keep emulation at real time by occasionally skipping a frame

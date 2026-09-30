@@ -20,6 +20,9 @@
  *   out_delay_ms=20            (MIDI out is sent on a steady real-time
  *                               schedule this long after it was generated,
  *                               instead of in per-frame bursts)
+ *   offset_ms=0                (fine timing trim. Positive: FMS plays earlier,
+ *                               negative: later. Re-read from the file about
+ *                               once a second; applies from the next start)
  *   lead_ticks=0               (-24..24. Positive: on start, send N extra
  *                               ticks at once so FMS runs N clocks ahead.
  *                               Negative: hold FMS's start back N clocks.
@@ -45,6 +48,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <glob.h>
+#include <math.h>
+#include <sys/stat.h>
 #include <pthread.h>
 #include <time.h>
 #include <unistd.h>
@@ -108,6 +113,7 @@ static bool _queuePush(struct GBASIOMidiSync* m, uint8_t byte) {
 		return false;
 	}
 	m->queue[m->tail] = byte;
+	m->release[m->tail] = m->nextRelease;
 	m->tail = next;
 	return true;
 }
@@ -152,6 +158,8 @@ static void _loadConfig(struct GBASIOMidiSync* m) {
 			m->outDelayMs = atof(value);
 		} else if (!strcmp(key, "pace")) {
 			m->paceEnabled = atoi(value) != 0;
+		} else if (!strcmp(key, "offset_ms")) {
+			m->offsetMs = atof(value);
 		} else if (!strcmp(key, "lead_ticks")) {
 			int lead = atoi(value);
 			m->leadTicks = lead > 24 ? 24 : (lead < -24 ? -24 : lead);
@@ -322,16 +330,30 @@ static void _writeMidi(struct GBASIOMidiSync* m, uint8_t byte, double when) {
 }
 #endif
 
+static bool _headReady(struct GBASIOMidiSync* m) {
+	return !_queueEmpty(m) && m->release[m->head] <= _emuMs(m);
+}
+
 static void _tryDeliver(struct GBASIOMidiSync* m) {
 	struct GBA* gba = m->d.p->p;
-	if (m->armed && !_queueEmpty(m) && !mTimingIsScheduled(&gba->timing, &m->deliverEvent)) {
+	if (m->armed && _headReady(m) && !mTimingIsScheduled(&gba->timing, &m->deliverEvent)) {
 		mTimingSchedule(&gba->timing, &m->deliverEvent, DELIVER_CYCLES);
 	}
 }
 
 static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 	switch (byte) {
-	case 0xF8:
+	case 0xF8: {
+		double now = _realMs();
+		if (m->lastClockReal > 0) {
+			double dt = now - m->lastClockReal;
+			if (dt < 250) {
+				/* reads arrive in per-frame clumps; the average is still right */
+				m->tickMs = m->tickMs > 0 ? m->tickMs * 0.97 + dt * 0.03 : dt;
+			}
+		}
+		m->lastClockReal = now;
+		m->nextRelease = _emuMs(m) + m->delayMs;
 		++m->clocksIn;
 		if (m->startHold > 0) {
 			/* negative lead: FMS starts only after N clocks have passed */
@@ -353,6 +375,7 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 			     (unsigned long long) m->paceFrames);
 		}
 		break;
+	}
 	case 0xFA:
 	case 0xFB: {
 		/* Clocks received while stopped are stale; start from a clean slate */
@@ -363,12 +386,29 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 		m->startReal = _realMs();
 		m->startEmu = _emuMs(m);
 		m->startHold = 0;
+		/* offset_ms -> whole ticks sent early plus a sub-tick delay */
+		int offsetTicks = 0;
+		m->delayMs = 0;
+		if (m->offsetMs > 0 && m->tickMs > 1) {
+			offsetTicks = (int) ceil(m->offsetMs / m->tickMs);
+			if (offsetTicks > 24) {
+				offsetTicks = 24;
+			}
+			m->delayMs = offsetTicks * m->tickMs - m->offsetMs;
+			if (m->delayMs < 0) {
+				m->delayMs = 0;
+			}
+		} else if (m->offsetMs < 0) {
+			m->delayMs = -m->offsetMs;
+		}
+		m->nextRelease = _emuMs(m) + m->delayMs;
+		_log(m, "in: offset %.1fms -> %d early ticks + %.1fms delay (tick %.2fms)", m->offsetMs, offsetTicks, m->delayMs, m->tickMs);
 		if (m->leadTicks < 0) {
 			m->startHold = -m->leadTicks;
 		} else {
 			_queuePush(m, 0x02);
 			int i;
-			for (i = 0; i < m->leadTicks; ++i) {
+			for (i = 0; i < m->leadTicks + offsetTicks; ++i) {
 				_queuePush(m, 0x01);
 			}
 		}
@@ -376,6 +416,7 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 		break;
 	}
 	case 0xFC:
+		m->nextRelease = _emuMs(m) + m->delayMs;
 		if (m->startHold > 0) {
 			/* stopped before the delayed start happened: FMS never started */
 			m->startHold = 0;
@@ -393,6 +434,15 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 static void _pollEvent(struct mTiming* timing, void* context, uint32_t cyclesLate) {
 	struct GBASIOMidiSync* m = context;
 #ifdef MIDISYNC_ENABLED
+	if (++m->reloadCounter >= REOPEN_POLLS) {
+		m->reloadCounter = 0;
+		struct stat st;
+		if (stat(CONFIG_PATH, &st) == 0 && st.st_mtime != m->configMtime) {
+			m->configMtime = st.st_mtime;
+			_loadConfig(m);
+			_log(m, "config reloaded: offset_ms=%.1f lead_ticks=%d", m->offsetMs, m->leadTicks);
+		}
+	}
 	if (m->fd < 0) {
 		if (++m->reopenCounter >= REOPEN_POLLS) {
 			m->reopenCounter = 0;
@@ -422,7 +472,7 @@ static void _pollEvent(struct mTiming* timing, void* context, uint32_t cyclesLat
 static void _deliverEvent(struct mTiming* timing, void* context, uint32_t cyclesLate) {
 	UNUSED(timing);
 	struct GBASIOMidiSync* m = context;
-	if (!m->armed || _queueEmpty(m)) {
+	if (!m->armed || !_headReady(m)) {
 		return;
 	}
 	uint8_t byte = _queuePop(m);
@@ -444,6 +494,12 @@ static bool _init(struct GBASIODriver* driver) {
 	m->devPath[0] = '\0';
 #ifdef MIDISYNC_ENABLED
 	_loadConfig(m);
+	{
+		struct stat st;
+		if (stat(CONFIG_PATH, &st) == 0) {
+			m->configMtime = st.st_mtime;
+		}
+	}
 	_outStart();
 	if (m->logEnabled) {
 		m->log = fopen(LOG_PATH, "w");
@@ -451,7 +507,7 @@ static bool _init(struct GBASIODriver* driver) {
 			m->log = fopen(LOG_FALLBACK, "w");
 		}
 	}
-	_log(m, "mgba-midisync: clock_div=%d lead_ticks=%d pace=%d out=%d out_delay_ms=%.1f device=%s", m->clockDiv, m->leadTicks, m->paceEnabled, m->outEnabled, m->outDelayMs, m->devPath[0] ? m->devPath : "(auto)");
+	_log(m, "mgba-midisync: offset_ms=%.1f clock_div=%d lead_ticks=%d pace=%d out=%d out_delay_ms=%.1f device=%s", m->offsetMs, m->clockDiv, m->leadTicks, m->paceEnabled, m->outEnabled, m->outDelayMs, m->devPath[0] ? m->devPath : "(auto)");
 	_openDevice(m);
 	if (m->fd < 0) {
 		_log(m, "no MIDI device yet, will retry");

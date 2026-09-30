@@ -38,6 +38,14 @@ struct GBASIOMidiSync {
 	bool armed;
 	bool startPending;
 	uint8_t queue[MIDISYNC_QUEUE_SIZE];
+	double release[MIDISYNC_QUEUE_SIZE];
+	double nextRelease;
+	double offsetMs;
+	double delayMs;
+	double tickMs;
+	double lastClockReal;
+	long configMtime;
+	unsigned reloadCounter;
 	unsigned head;
 	unsigned tail;
 
