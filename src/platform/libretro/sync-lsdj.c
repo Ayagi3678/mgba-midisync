@@ -25,6 +25,10 @@
 #define OUT_STOP_TICKS 6
 /* ... but never sooner than this */
 #define OUT_STOP_MIN_MS 150
+/* while LSDj leads (and a moment after), incoming MIDI transport/clock is
+ * ignored: gear following LSDj may echo it back, and feeding that echo to
+ * LSDj when it stops (it then waits on the external clock) glitches it */
+#define LEAD_ECHO_GUARD_MS 500
 
 static double _emuMs(struct GBSIOLSDjSync* m) {
 	return MidiEmuClockMs(&m->clock);
@@ -42,9 +46,19 @@ static void _tryDeliver(struct GBSIOLSDjSync* m) {
 	}
 }
 
+static bool _leading(struct GBSIOLSDjSync* m) {
+	return m->outStarted || (m->lastOutEmu > 0 && _emuMs(m) - m->lastOutEmu < LEAD_ECHO_GUARD_MS);
+}
+
 static void _handleMidiByte(struct GBSIOLSDjSync* m, uint8_t byte) {
 	struct MidiHost* h = &m->host;
 	double release = _emuMs(m) + m->delayMs;
+	if ((byte == 0xF8 || byte == 0xFA || byte == 0xFB) && _leading(m)) {
+		if (byte != 0xF8) {
+			MidiHostLog(h, "in: ignoring MIDI %s while LSDj leads", byte == 0xFA ? "start" : "continue");
+		}
+		return;
+	}
 	switch (byte) {
 	case 0xF8:
 		MidiHostNoteClock(h);
@@ -202,6 +216,9 @@ static uint8_t _writeSC(struct GBSIODriver* driver, uint8_t value) {
 		m->outStarted = true;
 		m->clocksOut = 0;
 		m->outTickMs = 0;
+		/* LSDj leads now; drop anything that was going to it */
+		m->running = false;
+		MidiDeliveryQueueClear(&m->queue);
 		MidiHostSend(&m->host, 0xFA, now);
 		MidiHostLog(&m->host, "out: start at row %02X", sent);
 	} else {
