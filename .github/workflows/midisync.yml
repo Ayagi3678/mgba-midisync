@@ -14,14 +14,14 @@ jobs:
   aarch64:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Install cross toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake gcc-aarch64-linux-gnu zip
+          sudo apt-get install -y cmake gcc-aarch64-linux-gnu g++-aarch64-linux-gnu zip
 
       - name: Build and package
         env:
@@ -36,7 +36,7 @@ jobs:
           fi
           tail -n 5 build.log
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: mgba-midisync-aarch64
           path: |

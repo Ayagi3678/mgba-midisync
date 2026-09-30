@@ -110,7 +110,7 @@ RetroArch on mali-fbdev.
 
 ## Building
 ```
-sudo apt install cmake gcc-aarch64-linux-gnu zip
+sudo apt install cmake gcc-aarch64-linux-gnu g++-aarch64-linux-gnu zip
 scripts/build-aarch64.sh            # -> dist/mgba-midisync-<version>-aarch64.zip
 ```
 GitHub Actions builds the same package for every push and attaches it to a release for `v*` tags.
