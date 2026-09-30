@@ -22,7 +22,7 @@ Changes (all in `src/platform/libretro/`):
 device=/dev/snd/midiC1D0   # default: first non-card-0 rawmidi device
 clock_div=1                # one 01 per N incoming F8
 lead_ticks=0               # on start, send N extra ticks to cancel audio latency
-pace=1                     # keep emulation at real time (RetroArch vsync runs it ~0.8% fast)
+pace=1                     # keep emulation at real time by occasionally skipping a frame
 out_delay_ms=20            # MIDI out sent on a real-time schedule this long after generation
 in=1
 out=1
