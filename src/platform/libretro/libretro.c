@@ -639,8 +639,16 @@ void retro_run(void) {
 		}
 	}
 
-	core->runFrame(core);
 	unsigned width, height;
+#ifdef M_CORE_GBA
+	if (midiSyncAttached && !GBASIOMidiSyncPaceFrame(&midiSync, core->frameCycles(core) / (double) core->frequency(core))) {
+		/* Emulation is a frame ahead of real time: show the same picture again */
+		core->currentVideoSize(core, &width, &height);
+		videoCallback(outputBuffer, width, height, BYTES_PER_PIXEL * 256);
+		return;
+	}
+#endif
+	core->runFrame(core);
 	core->currentVideoSize(core, &width, &height);
 	videoCallback(outputBuffer, width, height, BYTES_PER_PIXEL * 256);
 
@@ -665,9 +673,6 @@ void retro_run(void) {
 				}
 				audioCallback(audioSampleBuffer, (size_t)produced);
 			}
-		}
-		if (midiSyncAttached) {
-			GBASIOMidiSyncPaceFrame(&midiSync, core->frameCycles(core) / (double) core->frequency(core));
 		}
 	}
 #endif

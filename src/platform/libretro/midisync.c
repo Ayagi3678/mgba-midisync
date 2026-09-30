@@ -338,8 +338,9 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 		if (m->clocksIn % 96 == 0) {
 			double real = _realMs() - m->startReal;
 			double emu = _emuMs(m) - m->startEmu;
-			_log(m, "in: %u clocks, delivered %u, queued %u, dropped %u, real %.0fms emu %.0fms (%.3fx)",
-			     m->clocksIn, m->delivered, _queueDepth(m), m->dropped, real, emu, real > 0 ? emu / real : 0);
+			_log(m, "in: %u clocks, delivered %u, queued %u, dropped %u, real %.0fms emu %.0fms (%.3fx), frames skipped %llu",
+			     m->clocksIn, m->delivered, _queueDepth(m), m->dropped, real, emu, real > 0 ? emu / real : 0,
+			     (unsigned long long) m->paceFrames);
 		}
 		break;
 	case 0xFA:
@@ -513,7 +514,8 @@ static uint16_t _writeSIOCNT(struct GBASIODriver* driver, uint16_t value) {
 			if (midi) {
 				double when = 0;
 				if (m->paceValid) {
-					when = m->frameRealStart + (_emuMs(m) - m->frameEmuStartMs) + m->outDelayMs;
+					/* emulated time maps onto real time from paceBase */
+					when = m->paceBase + (_emuMs(m) - m->frameEmuStartMs) + m->outDelayMs;
 				}
 				_writeMidi(m, midi, when);
 			}
@@ -573,36 +575,39 @@ void GBASIOMidiSyncInjectMidi(struct GBASIOMidiSync* m, uint8_t byte) {
 	_handleMidiByte(m, byte);
 }
 
-void GBASIOMidiSyncPaceFrame(struct GBASIOMidiSync* m, double frameSeconds) {
+bool GBASIOMidiSyncPaceFrame(struct GBASIOMidiSync* m, double frameSeconds) {
 #ifdef MIDISYNC_ENABLED
 	if (!m->paceEnabled) {
-		return;
+		return true;
 	}
+	/* RetroArch paces the core to the display (60 Hz), slightly faster than
+	 * the GBA's 59.73 Hz. Rather than sleeping (which fights vsync and makes
+	 * audio arrive in uneven chunks -> clicks), drop one emulated frame
+	 * whenever emulation gets a full frame ahead of real time. RetroArch's
+	 * audio buffer covers the short gap and the audio itself stays intact. */
 	double now = _realMs();
+	double emu = _emuMs(m);
 	double frameMs = frameSeconds * 1000.0;
-	if (m->paceFrames == 0) {
+	if (!m->paceValid) {
 		m->paceBase = now;
+		m->frameEmuStartMs = emu;
+		m->paceValid = true;
+		return true;
 	}
-	++m->paceFrames;
-	double target = m->paceBase + m->paceFrames * frameMs;
-	double ahead = target - now;
-	if (ahead > 0.5) {
-		struct timespec ts;
-		ts.tv_sec = (time_t) (ahead / 1000.0);
-		ts.tv_nsec = (long) ((ahead - ts.tv_sec * 1000.0) * 1e6);
-		nanosleep(&ts, NULL);
-	} else if (ahead < -100.0) {
+	double ahead = (emu - m->frameEmuStartMs) - (now - m->paceBase);
+	if (ahead > frameMs) {
+		++m->paceFrames;
+		return false;
+	}
+	if (ahead < -200.0) {
 		/* Fell far behind (menu, loading, hiccup): restart the timeline */
 		m->paceBase = now;
-		m->paceFrames = 0;
-		target = now;
+		m->frameEmuStartMs = emu;
 	}
-	/* The next frame's emulated time maps onto real time starting here */
-	m->frameRealStart = target;
-	m->frameEmuStartMs = _emuMs(m);
-	m->paceValid = true;
+	return true;
 #else
 	UNUSED(m);
 	UNUSED(frameSeconds);
+	return true;
 #endif
 }
