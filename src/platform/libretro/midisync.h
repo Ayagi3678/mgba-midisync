@@ -24,10 +24,15 @@ struct GBASIOMidiSync {
 	int clockCount;
 	int leadTicks;
 	bool outEnabled;
+	bool inEnabled;
 	bool logEnabled;
 	bool paceEnabled;
 	double paceBase;
 	uint64_t paceFrames;
+	bool paceValid;
+	double frameRealStart;
+	double frameEmuStartMs;
+	double outDelayMs;
 	FILE* log;
 
 	bool armed;

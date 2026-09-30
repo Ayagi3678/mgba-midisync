@@ -17,6 +17,9 @@
  *   pace=1                     (keep emulation at exactly real time; RetroArch
  *                               vsync otherwise runs it ~0.5-1% fast, which
  *                               makes FMS drift behind the MIDI clock)
+ *   out_delay_ms=20            (MIDI out is sent on a steady real-time
+ *                               schedule this long after it was generated,
+ *                               instead of in per-frame bursts)
  *   lead_ticks=0               (on start, send N extra ticks at once so FMS
  *                               runs N clocks ahead to cancel audio latency)
  *
@@ -40,9 +43,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <glob.h>
+#include <pthread.h>
 #include <time.h>
 #include <unistd.h>
 #define MIDISYNC_ENABLED 1
+static void _setOutFd(int fd);
 #endif
 
 #define CONFIG_PATH "/userdata/system/configs/mgba-midisync.cfg"
@@ -139,6 +144,10 @@ static void _loadConfig(struct GBASIOMidiSync* m) {
 			m->clockDiv = div > 0 ? div : 1;
 		} else if (!strcmp(key, "out")) {
 			m->outEnabled = atoi(value) != 0;
+		} else if (!strcmp(key, "in")) {
+			m->inEnabled = atoi(value) != 0;
+		} else if (!strcmp(key, "out_delay_ms")) {
+			m->outDelayMs = atof(value);
 		} else if (!strcmp(key, "pace")) {
 			m->paceEnabled = atoi(value) != 0;
 		} else if (!strcmp(key, "lead_ticks")) {
@@ -186,25 +195,128 @@ static void _openDevice(struct GBASIOMidiSync* m) {
 		m->fd = open(path, O_RDONLY | O_NONBLOCK);
 	}
 	if (m->fd >= 0) {
+		_setOutFd(m->fd);
 		_log(m, "opened %s", path);
 	}
 }
 
+/* ---- Timed MIDI output ------------------------------------------------
+ * The emulator computes a whole frame in a few ms and then sleeps, so bytes
+ * written straight from the emulation arrive in per-frame clumps (up to
+ * ~16 ms of jitter). Instead each byte is stamped with the real time it
+ * corresponds to and a small thread sends it at that moment. */
+#define OUTQ_SIZE 256
+static struct { uint8_t byte; double when; } _outq[OUTQ_SIZE];
+static unsigned _outHead, _outTail;
+static pthread_mutex_t _outMutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t _outCond;
+static pthread_t _outThread;
+static bool _outThreadRunning;
+static bool _outStop;
+static int _outFd = -1;
+
+static void _msToTimespec(double ms, struct timespec* ts) {
+	ts->tv_sec = (time_t) (ms / 1000.0);
+	ts->tv_nsec = (long) ((ms - ts->tv_sec * 1000.0) * 1e6);
+	if (ts->tv_nsec >= 1000000000L) {
+		ts->tv_sec += 1;
+		ts->tv_nsec -= 1000000000L;
+	} else if (ts->tv_nsec < 0) {
+		ts->tv_nsec = 0;
+	}
+}
+
+static void* _outThreadMain(void* arg) {
+	UNUSED(arg);
+	pthread_mutex_lock(&_outMutex);
+	while (!_outStop) {
+		if (_outHead == _outTail) {
+			pthread_cond_wait(&_outCond, &_outMutex);
+			continue;
+		}
+		double when = _outq[_outHead].when;
+		double now = _realMs();
+		if (when > now + 0.1) {
+			struct timespec ts;
+			_msToTimespec(when, &ts);
+			pthread_cond_timedwait(&_outCond, &_outMutex, &ts);
+			continue;
+		}
+		uint8_t byte = _outq[_outHead].byte;
+		_outHead = (_outHead + 1) % OUTQ_SIZE;
+		if (_outFd >= 0) {
+			ssize_t r = write(_outFd, &byte, 1);
+			UNUSED(r);
+		}
+	}
+	pthread_mutex_unlock(&_outMutex);
+	return NULL;
+}
+
+static void _outStart(void) {
+	if (_outThreadRunning) {
+		return;
+	}
+	pthread_condattr_t attr;
+	pthread_condattr_init(&attr);
+	pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+	pthread_cond_init(&_outCond, &attr);
+	pthread_condattr_destroy(&attr);
+	_outHead = _outTail = 0;
+	_outStop = false;
+	if (pthread_create(&_outThread, NULL, _outThreadMain, NULL) == 0) {
+		_outThreadRunning = true;
+	}
+}
+
+static void _outShutdown(void) {
+	if (!_outThreadRunning) {
+		return;
+	}
+	pthread_mutex_lock(&_outMutex);
+	_outStop = true;
+	pthread_cond_signal(&_outCond);
+	pthread_mutex_unlock(&_outMutex);
+	pthread_join(_outThread, NULL);
+	pthread_cond_destroy(&_outCond);
+	_outThreadRunning = false;
+}
+
+static void _setOutFd(int fd) {
+	pthread_mutex_lock(&_outMutex);
+	_outFd = fd;
+	_outHead = _outTail = 0;
+	pthread_mutex_unlock(&_outMutex);
+}
+
 static void _closeDevice(struct GBASIOMidiSync* m) {
 	if (m->fd >= 0) {
+		_setOutFd(-1);
 		close(m->fd);
 		m->fd = -1;
 		_log(m, "device closed");
 	}
 }
 
-static void _writeMidi(struct GBASIOMidiSync* m, uint8_t byte) {
+static void _writeMidi(struct GBASIOMidiSync* m, uint8_t byte, double when) {
 	if (m->fd < 0 || !m->outEnabled) {
 		return;
 	}
-	if (write(m->fd, &byte, 1) < 0 && errno != EAGAIN) {
-		_log(m, "write error %d", errno);
+	if (!_outThreadRunning || when <= 0) {
+		if (write(m->fd, &byte, 1) < 0 && errno != EAGAIN) {
+			_log(m, "write error %d", errno);
+		}
+		return;
 	}
+	pthread_mutex_lock(&_outMutex);
+	unsigned next = (_outTail + 1) % OUTQ_SIZE;
+	if (next != _outHead) {
+		_outq[_outTail].byte = byte;
+		_outq[_outTail].when = when;
+		_outTail = next;
+		pthread_cond_signal(&_outCond);
+	}
+	pthread_mutex_unlock(&_outMutex);
 }
 #endif
 
@@ -265,7 +377,7 @@ static void _pollEvent(struct mTiming* timing, void* context, uint32_t cyclesLat
 			m->reopenCounter = 0;
 			_openDevice(m);
 		}
-	} else {
+	} else if (m->inEnabled) {
 		uint8_t buf[64];
 		ssize_t n;
 		while ((n = read(m->fd, buf, sizeof(buf))) > 0) {
@@ -306,16 +418,19 @@ static bool _init(struct GBASIODriver* driver) {
 	m->outEnabled = true;
 	m->logEnabled = true;
 	m->paceEnabled = true;
+	m->outDelayMs = 20;
+	m->inEnabled = true;
 	m->devPath[0] = '\0';
 #ifdef MIDISYNC_ENABLED
 	_loadConfig(m);
+	_outStart();
 	if (m->logEnabled) {
 		m->log = fopen(LOG_PATH, "w");
 		if (!m->log) {
 			m->log = fopen(LOG_FALLBACK, "w");
 		}
 	}
-	_log(m, "mgba-midisync: clock_div=%d lead_ticks=%d pace=%d out=%d device=%s", m->clockDiv, m->leadTicks, m->paceEnabled, m->outEnabled, m->devPath[0] ? m->devPath : "(auto)");
+	_log(m, "mgba-midisync: clock_div=%d lead_ticks=%d pace=%d out=%d out_delay_ms=%.1f device=%s", m->clockDiv, m->leadTicks, m->paceEnabled, m->outEnabled, m->outDelayMs, m->devPath[0] ? m->devPath : "(auto)");
 	_openDevice(m);
 	if (m->fd < 0) {
 		_log(m, "no MIDI device yet, will retry");
@@ -327,6 +442,7 @@ static bool _init(struct GBASIODriver* driver) {
 static void _deinit(struct GBASIODriver* driver) {
 	struct GBASIOMidiSync* m = (struct GBASIOMidiSync*) driver;
 #ifdef MIDISYNC_ENABLED
+	_outShutdown();
 	_closeDevice(m);
 #endif
 	if (m->log) {
@@ -395,7 +511,11 @@ static uint16_t _writeSIOCNT(struct GBASIODriver* driver, uint16_t value) {
 			}
 #ifdef MIDISYNC_ENABLED
 			if (midi) {
-				_writeMidi(m, midi);
+				double when = 0;
+				if (m->paceValid) {
+					when = m->frameRealStart + (_emuMs(m) - m->frameEmuStartMs) + m->outDelayMs;
+				}
+				_writeMidi(m, midi, when);
 			}
 #endif
 			mTimingDeschedule(&gba->timing, &driver->p->completeEvent);
@@ -475,7 +595,12 @@ void GBASIOMidiSyncPaceFrame(struct GBASIOMidiSync* m, double frameSeconds) {
 		/* Fell far behind (menu, loading, hiccup): restart the timeline */
 		m->paceBase = now;
 		m->paceFrames = 0;
+		target = now;
 	}
+	/* The next frame's emulated time maps onto real time starting here */
+	m->frameRealStart = target;
+	m->frameEmuStartMs = _emuMs(m);
+	m->paceValid = true;
 #else
 	UNUSED(m);
 	UNUSED(frameSeconds);
