@@ -24,7 +24,7 @@ Same wire protocol as Arduinoboy:
 
 ### Code layout (`src/platform/libretro/`)
 - `midi-host.c/.h` – shared, console-agnostic: rawmidi device, `.cfg`, log, timed MIDI output thread,
-  clock tempo estimate, offset → early ticks + delay, real-time pacing, emulated ↔ real time mapping
+  clock tempo estimate, offset → early ticks + delay, real-time slicing, emulated ↔ real time mapping
 - `sync-fms.c/.h` – FMS protocol on the GBA link port (`GBASIODriver`)
 - `sync-lsdj.c/.h` – LSDj protocol on the Game Boy link port (`GBSIODriver`)
 - `gba-audio-rate.c` – GBA audio to a fixed 65536 Hz with exact integer ratios (x2, 1, /2, /4)
@@ -47,7 +47,7 @@ In RetroArch: **Quick Menu → Core Options → MIDI Sync (FMS)**
 | MIDI Sync (Restart) | Auto (FMS / LSDj only) | `Auto` enables the bridge only when the ROM title or file name contains "FMS" (GBA) or "LSDJ" (Game Boy); every other game runs as plain mGBA. `Always` / `Disabled` force it. |
 | Offset (follow MIDI) | 95 ms | The game follows MIDI clock: `+` plays earlier, `-` later. Cancels the emulator's audio latency. Applies from the next MIDI start. The first beat after start can't be pulled earlier. |
 | Clock Out Delay (lead MIDI) | 55 ms | The game leads: delay before each MIDI clock is sent. Set it to the audio latency so external gear lines up from the first beat. |
-| Real-Time Pacing | On | Skips a frame whenever emulation gets a frame ahead of real time (RetroArch's 60 Hz vsync runs games ~0.5% fast, so they would drift behind MIDI clock). |
+| Real-Time Pacing | On | Runs emulation in real-time slices instead of whole frames, so emulated time equals real time (RetroArch's 60 Hz vsync runs games ~0.5% fast, so they would drift behind MIDI clock). Audio stays continuous; the screen shows the last complete frame. |
 
 Advanced (optional) `/userdata/system/configs/mgba-midisync.cfg`, re-read about once a second:
 ```

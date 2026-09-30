@@ -534,7 +534,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "mgba_midisync_pace",
       "MIDI Sync: Real-Time Pacing",
       "Real-Time Pacing",
-      "Keep emulation at exactly real time by skipping a frame when it runs ahead (RetroArch's 60 Hz vsync otherwise runs games ~0.5% fast, and the game slowly drifts behind MIDI clock).",
+      "Run emulation in real-time slices so emulated time equals real time (RetroArch's 60 Hz vsync otherwise runs games ~0.5% fast, and the game slowly drifts behind MIDI clock). Audio stays continuous.",
       NULL,
       "midisync",
       {

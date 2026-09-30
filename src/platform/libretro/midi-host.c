@@ -457,40 +457,28 @@ void MidiHostSend(struct MidiHost* h, uint8_t byte, double emuMs) {
 #endif
 }
 
-bool MidiHostPaceFrame(struct MidiHost* h, double emuMs, double frameMs) {
-#ifdef MIDI_HOST_ENABLED
-	if (!h->paceEnabled) {
-		return true;
-	}
-	/* RetroArch paces the core to the display (60 Hz), slightly faster than
-	 * the console. Rather than sleeping (which fights vsync and makes audio
-	 * arrive in uneven chunks -> clicks), skip one emulated frame whenever
-	 * emulation gets a whole frame ahead of real time. RetroArch's audio
-	 * buffer covers the short gap and the audio itself stays intact. */
+double MidiHostPaceBudget(struct MidiHost* h, double emuMs, double frameMs) {
+	/* Emulation is run in real-time slices instead of whole frames: each call
+	 * returns how much emulated time to run now so that emulated time equals
+	 * real time. RetroArch's 60 Hz vsync would otherwise run the console a
+	 * little fast, audio would pile up and a MIDI-synced game would drift.
+	 * Skipping whole frames fixed the drift but left a periodic gap (click)
+	 * in the audio; slicing keeps the audio continuous. */
 	double now = MidiHostRealMs();
 	if (!h->paceValid) {
 		h->paceBase = now;
-		h->paceEmuBase = emuMs;
+		h->paceEmuBase = emuMs - frameMs;
 		h->paceValid = true;
-		return true;
 	}
-	double ahead = (emuMs - h->paceEmuBase) - (now - h->paceBase);
-	if (ahead > frameMs) {
-		++h->framesSkipped;
-		return false;
-	}
-	if (ahead < -200.0) {
+	double budget = (now - h->paceBase) - (emuMs - h->paceEmuBase);
+	if (budget > frameMs * 4) {
 		/* Fell far behind (menu, loading, hiccup): restart the timeline */
+		++h->framesSkipped;
 		h->paceBase = now;
-		h->paceEmuBase = emuMs;
+		h->paceEmuBase = emuMs - frameMs;
+		budget = frameMs;
 	}
-	return true;
-#else
-	UNUSED(h);
-	UNUSED(emuMs);
-	UNUSED(frameMs);
-	return true;
-#endif
+	return budget > 0 ? budget : 0;
 }
 
 void MidiHostSetOptions(struct MidiHost* h, double offsetMs, double outDelayMs, bool pace) {

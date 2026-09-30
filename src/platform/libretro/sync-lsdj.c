@@ -275,9 +275,6 @@ void GBSIOLSDjSyncEnsureRunning(struct GBSIOLSDjSync* m) {
 	_scheduleRunning(m);
 }
 
-bool GBSIOLSDjSyncPaceFrame(struct GBSIOLSDjSync* m, double frameMs) {
-	return MidiHostPaceFrame(&m->host, _emuMs(m), frameMs);
-}
 
 void GBSIOLSDjSyncSetOptions(struct GBSIOLSDjSync* m, double offsetMs, double outDelayMs, bool pace) {
 	MidiHostSetOptions(&m->host, offsetMs, outDelayMs, pace);

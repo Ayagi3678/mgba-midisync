@@ -39,7 +39,6 @@ struct GBASIOFMSSync {
 
 void GBASIOFMSSyncCreate(struct GBASIOFMSSync*);
 void GBASIOFMSSyncEnsureRunning(struct GBASIOFMSSync*);
-bool GBASIOFMSSyncPaceFrame(struct GBASIOFMSSync*, double frameMs);
 void GBASIOFMSSyncSetOptions(struct GBASIOFMSSync*, double offsetMs, double outDelayMs, bool pace);
 
 #endif

@@ -197,23 +197,63 @@ static void _midiSyncEnsureRunning(void) {
 	}
 }
 
-/* false: skip this frame, emulation is a whole frame ahead of real time */
-static bool _midiSyncPaceFrame(void) {
-	double frameMs = core->frameCycles(core) * 1000.0 / (double) core->frequency(core);
+/* The sync driver's host and emulated clock, if one is attached */
+static bool _midiSyncTiming(struct MidiHost** host, struct MidiEmuClock** clock) {
 	switch (midiSyncKind) {
 #ifdef M_CORE_GBA
 	case MIDI_SYNC_FMS:
-		return GBASIOFMSSyncPaceFrame(&fmsSync, frameMs);
+		*host = &fmsSync.host;
+		*clock = &fmsSync.clock;
+		return true;
 #endif
 #ifdef M_CORE_GB
 	case MIDI_SYNC_LSDJ:
-		return GBSIOLSDjSyncPaceFrame(&lsdjSync, frameMs);
+		*host = &lsdjSync.host;
+		*clock = &lsdjSync.clock;
+		return true;
 #endif
 	default:
-		return true;
+		return false;
 	}
 }
+
+/* Last complete frame, shown while emulation runs in real-time slices that
+ * don't line up with frame boundaries */
+static mColor* presentBuffer = NULL;
+static bool presentReady = false;
+static struct mCoreCallbacks midiSyncCallbacks;
+
 static mColor* outputBuffer = NULL;
+
+static void _midiSyncFrameEnded(void* context) {
+	UNUSED(context);
+	if (presentBuffer) {
+		memcpy(presentBuffer, outputBuffer, VIDEO_BUFF_SIZE);
+		presentReady = true;
+	}
+}
+
+/* Run the core so emulated time follows real time. Returns false when
+ * pacing is off and the caller should just run a normal frame. */
+static bool _midiSyncRunSliced(void) {
+	struct MidiHost* host;
+	struct MidiEmuClock* clock;
+	if (!_midiSyncTiming(&host, &clock) || !host->paceEnabled) {
+		return false;
+	}
+	if (!presentBuffer) {
+		presentBuffer = malloc(VIDEO_BUFF_SIZE);
+		memcpy(presentBuffer, outputBuffer, VIDEO_BUFF_SIZE);
+		midiSyncCallbacks = (struct mCoreCallbacks) { .videoFrameEnded = _midiSyncFrameEnded };
+		core->addCoreCallbacks(core, &midiSyncCallbacks);
+	}
+	double frameMs = core->frameCycles(core) * 1000.0 / (double) core->frequency(core);
+	double end = MidiEmuClockMs(clock) + MidiHostPaceBudget(host, MidiEmuClockMs(clock), frameMs);
+	while (MidiEmuClockMs(clock) < end) {
+		core->runLoop(core);
+	}
+	return true;
+}
 static int16_t *audioSampleBuffer = NULL;
 static size_t audioSampleBufferSize;
 static float audioSamplesPerFrameAvg;
@@ -771,15 +811,14 @@ void retro_run(void) {
 
 	unsigned width, height;
 	gameRunning = true;
-	if (midiSyncKind != MIDI_SYNC_NONE && !_midiSyncPaceFrame()) {
-		/* Emulation is a frame ahead of real time: show the same picture again */
+	if (_midiSyncRunSliced()) {
+		core->currentVideoSize(core, &width, &height);
+		videoCallback(presentReady ? presentBuffer : outputBuffer, width, height, BYTES_PER_PIXEL * 256);
+	} else {
+		core->runFrame(core);
 		core->currentVideoSize(core, &width, &height);
 		videoCallback(outputBuffer, width, height, BYTES_PER_PIXEL * 256);
-		return;
 	}
-	core->runFrame(core);
-	core->currentVideoSize(core, &width, &height);
-	videoCallback(outputBuffer, width, height, BYTES_PER_PIXEL * 256);
 
 #ifdef M_CORE_GBA
 	if (core->platform(core) == mPLATFORM_GBA) {
@@ -1173,6 +1212,9 @@ void retro_unload_game(void) {
 	midiSyncKind = MIDI_SYNC_NONE;
 	gameRunning = false;
 	core->deinit(core);
+	free(presentBuffer);
+	presentBuffer = NULL;
+	presentReady = false;
 #ifdef M_CORE_GB
 	if (kind == MIDI_SYNC_LSDJ) {
 		GBSIOLSDjSyncDestroy(&lsdjSync);

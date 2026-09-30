@@ -46,7 +46,6 @@ struct GBSIOLSDjSync {
 void GBSIOLSDjSyncCreate(struct GBSIOLSDjSync*, double timingFrequency);
 void GBSIOLSDjSyncDestroy(struct GBSIOLSDjSync*);
 void GBSIOLSDjSyncEnsureRunning(struct GBSIOLSDjSync*);
-bool GBSIOLSDjSyncPaceFrame(struct GBSIOLSDjSync*, double frameMs);
 void GBSIOLSDjSyncSetOptions(struct GBSIOLSDjSync*, double offsetMs, double outDelayMs, bool pace);
 
 #endif

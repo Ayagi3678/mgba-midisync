@@ -243,9 +243,6 @@ void GBASIOFMSSyncEnsureRunning(struct GBASIOFMSSync* m) {
 	}
 }
 
-bool GBASIOFMSSyncPaceFrame(struct GBASIOFMSSync* m, double frameMs) {
-	return MidiHostPaceFrame(&m->host, _emuMs(m), frameMs);
-}
 
 void GBASIOFMSSyncSetOptions(struct GBASIOFMSSync* m, double offsetMs, double outDelayMs, bool pace) {
 	MidiHostSetOptions(&m->host, offsetMs, outDelayMs, pace);

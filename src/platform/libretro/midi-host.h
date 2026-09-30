@@ -86,7 +86,7 @@ struct MidiHost {
 	bool paceValid;
 	double paceBase;
 	double paceEmuBase;
-	uint64_t framesSkipped;
+	uint64_t framesSkipped; /* timeline restarts */
 };
 
 double MidiHostRealMs(void);
@@ -114,9 +114,9 @@ double MidiHostRealForEmu(struct MidiHost*, double emuMs);
  * real-time schedule outDelayMs later instead of in per-frame clumps. */
 void MidiHostSend(struct MidiHost*, uint8_t byte, double emuMs);
 
-/* Call before running each frame; false means skip this frame because
- * emulation is a whole frame ahead of real time. */
-bool MidiHostPaceFrame(struct MidiHost*, double emuMs, double frameMs);
+/* Real-time slicing: how much emulated time (ms) to run now so emulated
+ * time keeps equal to real time. Call once per retro_run. */
+double MidiHostPaceBudget(struct MidiHost*, double emuMs, double frameMs);
 
 void MidiHostSetOptions(struct MidiHost*, double offsetMs, double outDelayMs, bool pace);
 
