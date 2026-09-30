@@ -20,7 +20,9 @@
  *   out_delay_ms=20            (MIDI out is sent on a steady real-time
  *                               schedule this long after it was generated,
  *                               instead of in per-frame bursts)
- *   lead_ticks=0               (on start, send N extra ticks at once so FMS
+ *   lead_ticks=0               (-24..24. Positive: on start, send N extra
+ *                               ticks at once so FMS runs N clocks ahead.
+ *                               Negative: hold FMS's start back N clocks.
  *                               runs N clocks ahead to cancel audio latency)
  *
  * Log: /userdata/system/logs/mgba-midisync.log (falls back to /tmp)
@@ -152,7 +154,7 @@ static void _loadConfig(struct GBASIOMidiSync* m) {
 			m->paceEnabled = atoi(value) != 0;
 		} else if (!strcmp(key, "lead_ticks")) {
 			int lead = atoi(value);
-			m->leadTicks = lead > 0 ? (lead > 24 ? 24 : lead) : 0;
+			m->leadTicks = lead > 24 ? 24 : (lead < -24 ? -24 : lead);
 		} else if (!strcmp(key, "log")) {
 			m->logEnabled = atoi(value) != 0;
 		}
@@ -331,6 +333,14 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 	switch (byte) {
 	case 0xF8:
 		++m->clocksIn;
+		if (m->startHold > 0) {
+			/* negative lead: FMS starts only after N clocks have passed */
+			if (--m->startHold == 0) {
+				_queuePush(m, 0x02);
+				m->clockCount = 0;
+			}
+			break;
+		}
 		if (++m->clockCount >= m->clockDiv) {
 			m->clockCount = 0;
 			_queuePush(m, 0x01);
@@ -352,16 +362,26 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 		m->delivered = 0;
 		m->startReal = _realMs();
 		m->startEmu = _emuMs(m);
-		_queuePush(m, 0x02);
-		int i;
-		for (i = 0; i < m->leadTicks; ++i) {
-			_queuePush(m, 0x01);
+		m->startHold = 0;
+		if (m->leadTicks < 0) {
+			m->startHold = -m->leadTicks;
+		} else {
+			_queuePush(m, 0x02);
+			int i;
+			for (i = 0; i < m->leadTicks; ++i) {
+				_queuePush(m, 0x01);
+			}
 		}
 		_log(m, "in: %s (lead %d)", byte == 0xFA ? "start" : "continue", m->leadTicks);
 		break;
 	}
 	case 0xFC:
-		_queuePush(m, 0x03);
+		if (m->startHold > 0) {
+			/* stopped before the delayed start happened: FMS never started */
+			m->startHold = 0;
+		} else {
+			_queuePush(m, 0x03);
+		}
 		_log(m, "in: stop after %u clocks", m->clocksIn);
 		break;
 	default:
