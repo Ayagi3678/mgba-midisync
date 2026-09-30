@@ -366,6 +366,15 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 		if (++m->clockCount >= m->clockDiv) {
 			m->clockCount = 0;
 			_queuePush(m, 0x01);
+			if (m->extraPending > 0) {
+				/* Catch-up tick halfway to the next clock. Sending several at
+				 * once doesn't work: FMS treats a burst as a single tick. */
+				double base = m->nextRelease;
+				m->nextRelease = base + (m->tickMs > 1 ? m->tickMs / 2 : 5);
+				_queuePush(m, 0x01);
+				m->nextRelease = base;
+				--m->extraPending;
+			}
 		}
 		if (m->clocksIn % 96 == 0) {
 			double real = _realMs() - m->startReal;
@@ -386,6 +395,7 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 		m->startReal = _realMs();
 		m->startEmu = _emuMs(m);
 		m->startHold = 0;
+		m->extraPending = 0;
 		/* offset_ms -> whole ticks sent early plus a sub-tick delay */
 		int offsetTicks = 0;
 		m->delayMs = 0;
@@ -407,10 +417,8 @@ static void _handleMidiByte(struct GBASIOMidiSync* m, uint8_t byte) {
 			m->startHold = -m->leadTicks;
 		} else {
 			_queuePush(m, 0x02);
-			int i;
-			for (i = 0; i < m->leadTicks + offsetTicks; ++i) {
-				_queuePush(m, 0x01);
-			}
+			/* extra ticks are spread over the next clocks (see F8) */
+			m->extraPending = m->leadTicks + offsetTicks;
 		}
 		_log(m, "in: %s (lead %d)", byte == 0xFA ? "start" : "continue", m->leadTicks);
 		break;

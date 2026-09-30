@@ -24,6 +24,7 @@ struct GBASIOMidiSync {
 	int clockCount;
 	int leadTicks;
 	int startHold;
+	int extraPending;
 	bool outEnabled;
 	bool inEnabled;
 	bool logEnabled;
