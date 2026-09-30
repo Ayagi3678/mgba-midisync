@@ -617,6 +617,20 @@ void retro_get_system_av_info(struct retro_system_av_info* info) {
 		info->timing.sample_rate = GBA_FIXED_AUDIO_RATE;
 	}
 #endif
+	struct MidiHost* host;
+	struct MidiEmuClock* clock;
+	if (_midiSyncTiming(&host, &clock) && host->paceEnabled) {
+		/* With real-time slicing the core produces exactly sample_rate samples
+		 * per real second, one call per display refresh. Report the display
+		 * rate so RetroArch doesn't expect the extra ~0.5% it would otherwise
+		 * (it assumes a 59.73 Hz core is being run at 60 Hz); that mismatch
+		 * slowly drained its audio buffer and caused recurring clicks. */
+		float refresh = 0;
+		if (!environCallback(RETRO_ENVIRONMENT_GET_TARGET_REFRESH_RATE, &refresh) || refresh < 30 || refresh > 240) {
+			refresh = 60;
+		}
+		info->timing.fps = refresh;
+	}
 }
 
 void retro_init(void) {
