@@ -457,26 +457,32 @@ void MidiHostSend(struct MidiHost* h, uint8_t byte, double emuMs) {
 #endif
 }
 
+/* Emulation runs this far ahead of real time, so RetroArch's audio buffer
+ * always has some audio queued. Running exactly on time left it near empty
+ * and any scheduling jitter became an underrun (click). */
+#define PACE_LEAD_FRAMES 3
+
 double MidiHostPaceBudget(struct MidiHost* h, double emuMs, double frameMs) {
 	/* Emulation is run in real-time slices instead of whole frames: each call
-	 * returns how much emulated time to run now so that emulated time equals
-	 * real time. RetroArch's 60 Hz vsync would otherwise run the console a
-	 * little fast, audio would pile up and a MIDI-synced game would drift.
-	 * Skipping whole frames fixed the drift but left a periodic gap (click)
-	 * in the audio; slicing keeps the audio continuous. */
+	 * returns how much emulated time to run now so that emulated time follows
+	 * real time (plus a fixed lead). RetroArch's 60 Hz vsync would otherwise
+	 * run the console a little fast, audio would pile up and a MIDI-synced
+	 * game would drift. Skipping whole frames fixed the drift but left a
+	 * periodic gap (click) in the audio; slicing keeps the audio continuous. */
 	double now = MidiHostRealMs();
+	double lead = frameMs * PACE_LEAD_FRAMES;
 	if (!h->paceValid) {
 		h->paceBase = now;
-		h->paceEmuBase = emuMs - frameMs;
+		h->paceEmuBase = emuMs;
 		h->paceValid = true;
 	}
-	double budget = (now - h->paceBase) - (emuMs - h->paceEmuBase);
-	if (budget > frameMs * 4) {
+	double budget = (now - h->paceBase + lead) - (emuMs - h->paceEmuBase);
+	if (budget > lead + frameMs * 4) {
 		/* Fell far behind (menu, loading, hiccup): restart the timeline */
 		++h->framesSkipped;
 		h->paceBase = now;
-		h->paceEmuBase = emuMs - frameMs;
-		budget = frameMs;
+		h->paceEmuBase = emuMs;
+		budget = lead;
 	}
 	return budget > 0 ? budget : 0;
 }
