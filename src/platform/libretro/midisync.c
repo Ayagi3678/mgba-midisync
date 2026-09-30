@@ -14,6 +14,9 @@
  *   clock_div=1                (send one 01 per N incoming F8)
  *   out=1                      (0 disables MIDI output)
  *   log=1                      (0 disables the log file)
+ *   pace=1                     (keep emulation at exactly real time; RetroArch
+ *                               vsync otherwise runs it ~0.5-1% fast, which
+ *                               makes FMS drift behind the MIDI clock)
  *   lead_ticks=0               (on start, send N extra ticks at once so FMS
  *                               runs N clocks ahead to cancel audio latency)
  *
@@ -136,6 +139,8 @@ static void _loadConfig(struct GBASIOMidiSync* m) {
 			m->clockDiv = div > 0 ? div : 1;
 		} else if (!strcmp(key, "out")) {
 			m->outEnabled = atoi(value) != 0;
+		} else if (!strcmp(key, "pace")) {
+			m->paceEnabled = atoi(value) != 0;
 		} else if (!strcmp(key, "lead_ticks")) {
 			int lead = atoi(value);
 			m->leadTicks = lead > 0 ? (lead > 24 ? 24 : lead) : 0;
@@ -300,6 +305,7 @@ static bool _init(struct GBASIODriver* driver) {
 	m->clockDiv = 1;
 	m->outEnabled = true;
 	m->logEnabled = true;
+	m->paceEnabled = true;
 	m->devPath[0] = '\0';
 #ifdef MIDISYNC_ENABLED
 	_loadConfig(m);
@@ -309,7 +315,7 @@ static bool _init(struct GBASIODriver* driver) {
 			m->log = fopen(LOG_FALLBACK, "w");
 		}
 	}
-	_log(m, "mgba-midisync: clock_div=%d lead_ticks=%d out=%d device=%s", m->clockDiv, m->leadTicks, m->outEnabled, m->devPath[0] ? m->devPath : "(auto)");
+	_log(m, "mgba-midisync: clock_div=%d lead_ticks=%d pace=%d out=%d device=%s", m->clockDiv, m->leadTicks, m->paceEnabled, m->outEnabled, m->devPath[0] ? m->devPath : "(auto)");
 	_openDevice(m);
 	if (m->fd < 0) {
 		_log(m, "no MIDI device yet, will retry");
@@ -445,4 +451,33 @@ void GBASIOMidiSyncEnsureRunning(struct GBASIOMidiSync* m) {
 
 void GBASIOMidiSyncInjectMidi(struct GBASIOMidiSync* m, uint8_t byte) {
 	_handleMidiByte(m, byte);
+}
+
+void GBASIOMidiSyncPaceFrame(struct GBASIOMidiSync* m, double frameSeconds) {
+#ifdef MIDISYNC_ENABLED
+	if (!m->paceEnabled) {
+		return;
+	}
+	double now = _realMs();
+	double frameMs = frameSeconds * 1000.0;
+	if (m->paceFrames == 0) {
+		m->paceBase = now;
+	}
+	++m->paceFrames;
+	double target = m->paceBase + m->paceFrames * frameMs;
+	double ahead = target - now;
+	if (ahead > 0.5) {
+		struct timespec ts;
+		ts.tv_sec = (time_t) (ahead / 1000.0);
+		ts.tv_nsec = (long) ((ahead - ts.tv_sec * 1000.0) * 1e6);
+		nanosleep(&ts, NULL);
+	} else if (ahead < -100.0) {
+		/* Fell far behind (menu, loading, hiccup): restart the timeline */
+		m->paceBase = now;
+		m->paceFrames = 0;
+	}
+#else
+	UNUSED(m);
+	UNUSED(frameSeconds);
+#endif
 }

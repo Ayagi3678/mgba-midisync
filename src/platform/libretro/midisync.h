@@ -25,6 +25,9 @@ struct GBASIOMidiSync {
 	int leadTicks;
 	bool outEnabled;
 	bool logEnabled;
+	bool paceEnabled;
+	double paceBase;
+	uint64_t paceFrames;
 	FILE* log;
 
 	bool armed;
@@ -49,6 +52,8 @@ struct GBASIOMidiSync {
 
 void GBASIOMidiSyncCreate(struct GBASIOMidiSync* m);
 void GBASIOMidiSyncEnsureRunning(struct GBASIOMidiSync* m);
+/* Sleep as needed so emulated time tracks real time; call once per frame */
+void GBASIOMidiSyncPaceFrame(struct GBASIOMidiSync* m, double frameSeconds);
 /* Feed a raw MIDI byte directly (used for testing) */
 void GBASIOMidiSyncInjectMidi(struct GBASIOMidiSync* m, uint8_t byte);
 

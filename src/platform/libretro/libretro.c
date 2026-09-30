@@ -666,6 +666,9 @@ void retro_run(void) {
 				audioCallback(audioSampleBuffer, (size_t)produced);
 			}
 		}
+		if (midiSyncAttached) {
+			GBASIOMidiSyncPaceFrame(&midiSync, core->frameCycles(core) / (double) core->frequency(core));
+		}
 	}
 #endif
 }
