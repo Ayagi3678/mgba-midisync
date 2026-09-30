@@ -77,8 +77,8 @@ struct retro_core_option_v2_category option_cats_us[] = {
    },
    {
       "midisync",
-      "MIDI Sync (FMS)",
-      "Sync FMS by Lo-Bit Club with USB MIDI gear over the emulated link port."
+      "MIDI Sync (FMS / LSDj)",
+      "Sync FMS (GBA) or LSDj (Game Boy) with USB MIDI gear over the emulated link port."
    },
    { NULL, NULL, NULL },
 };
@@ -313,11 +313,11 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "mgba_midisync_mode",
       "MIDI Sync (Restart)",
       NULL,
-      "Bridge the GBA link port to a USB MIDI device (/dev/snd/midiC*D0) so FMS can follow or lead MIDI clock. 'Auto' turns it on only for FMS (ROM title or file name containing FMS); other games run as plain mGBA.",
+      "Bridge the link port to a USB MIDI device (/dev/snd/midiC*D0) so FMS (GBA) or LSDj (Game Boy) can follow or lead MIDI clock. 'Auto' turns it on only when the ROM title or file name contains FMS (GBA) or LSDJ (Game Boy); other games run as plain mGBA.",
       NULL,
       "midisync",
       {
-         { "auto",     "Auto (FMS only)" },
+         { "auto",     "Auto (FMS / LSDj only)" },
          { "enabled",  "Always" },
          { "disabled", NULL },
          { NULL, NULL },
@@ -326,9 +326,9 @@ struct retro_core_option_v2_definition option_defs_us[] = {
    },
    {
       "mgba_midisync_offset_ms",
-      "MIDI Sync: Offset (FMS Sync In)",
-      "Offset (FMS Sync In)",
-      "When FMS follows MIDI clock: + makes FMS play earlier, - later. Use it to cancel the emulator's audio latency. Takes effect from the next MIDI start.",
+      "MIDI Sync: Offset (follow MIDI)",
+      "Offset (follow MIDI)",
+      "When FMS/LSDj follows MIDI clock: + makes it play earlier, - later. Use it to cancel the emulator's audio latency. Takes effect from the next MIDI start.",
       NULL,
       "midisync",
       {
@@ -459,9 +459,9 @@ struct retro_core_option_v2_definition option_defs_us[] = {
    },
    {
       "mgba_midisync_out_delay_ms",
-      "MIDI Sync: Clock Out Delay (FMS Sync Out)",
-      "Clock Out Delay (FMS Sync Out)",
-      "When FMS leads: how long after FMS generates a clock the MIDI clock is sent. Match it to the emulator's audio latency so external gear lines up with what you hear.",
+      "MIDI Sync: Clock Out Delay (lead MIDI)",
+      "Clock Out Delay (lead MIDI)",
+      "When FMS/LSDj leads: how long after the game generates a clock the MIDI clock is sent. Match it to the emulator's audio latency so external gear lines up with what you hear.",
       NULL,
       "midisync",
       {
@@ -534,7 +534,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "mgba_midisync_pace",
       "MIDI Sync: Real-Time Pacing",
       "Real-Time Pacing",
-      "Keep emulation at exactly real time by skipping a frame when it runs ahead (RetroArch's 60 Hz vsync otherwise runs GBA games ~0.5% fast, and FMS slowly drifts behind MIDI clock).",
+      "Keep emulation at exactly real time by skipping a frame when it runs ahead (RetroArch's 60 Hz vsync otherwise runs games ~0.5% fast, and the game slowly drifts behind MIDI clock).",
       NULL,
       "midisync",
       {

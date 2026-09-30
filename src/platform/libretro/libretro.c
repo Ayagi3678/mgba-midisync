@@ -15,6 +15,7 @@
 #ifdef M_CORE_GB
 #include <mgba/gb/core.h>
 #include <mgba/internal/gb/gb.h>
+#include <mgba/internal/gb/sio.h>
 #include <mgba/internal/gb/mbc.h>
 #include <mgba/internal/gb/overrides.h>
 #endif
@@ -27,7 +28,9 @@
 #include <mgba-util/vfs.h>
 
 #include "libretro_core_options.h"
-#include "midisync.h"
+#include <ctype.h>
+#include "sync-fms.h"
+#include "sync-lsdj.h"
 
 #include <mgba-util/audio-buffer.h>
 #include <mgba-util/audio-resampler.h>
@@ -70,9 +73,25 @@ static int32_t _readTiltY(struct mRotationSource* source);
 static int32_t _readGyroZ(struct mRotationSource* source);
 
 static struct mCore* core;
+/* ---- MIDI sync (FMS on GBA, LSDj on Game Boy) ---- */
+enum MidiSyncKind {
+	MIDI_SYNC_NONE,
+	MIDI_SYNC_FMS,
+	MIDI_SYNC_LSDJ,
+};
+static enum MidiSyncKind midiSyncKind = MIDI_SYNC_NONE;
 #ifdef M_CORE_GBA
-static struct GBASIOMidiSync midiSync;
-static bool midiSyncAttached = false;
+static struct GBASIOFMSSync fmsSync;
+#endif
+#ifdef M_CORE_GB
+static struct GBSIOLSDjSync lsdjSync;
+#endif
+/* Set once RetroArch has started running frames; before that it will query
+ * the AV info itself, and asking it to reinitialise during load is risky on
+ * some drivers. */
+static bool gameRunning = false;
+
+#ifdef M_CORE_GBA
 /* GBA audio is resampled to a fixed rate here instead of asking RetroArch to
  * reinitialise audio/video with SET_SYSTEM_AV_INFO whenever a game changes
  * SOUNDBIAS. On mali-fbdev (TrimUI Brick) that reinit fails to recreate the
@@ -81,6 +100,7 @@ static bool midiSyncAttached = false;
 static struct mAudioResampler gbaResampler;
 static struct mAudioBuffer gbaResampled;
 static bool gbaResamplerActive = false;
+#endif
 
 static void _loadMidiSyncOptions(void) {
 	double offset = 0, outDelay = 20;
@@ -99,20 +119,41 @@ static void _loadMidiSyncOptions(void) {
 	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
 		pace = strcmp(var.value, "disabled") != 0;
 	}
-	GBASIOMidiSyncSetOptions(&midiSync, offset, outDelay, pace);
+	switch (midiSyncKind) {
+#ifdef M_CORE_GBA
+	case MIDI_SYNC_FMS:
+		GBASIOFMSSyncSetOptions(&fmsSync, offset, outDelay, pace);
+		break;
+#endif
+#ifdef M_CORE_GB
+	case MIDI_SYNC_LSDJ:
+		GBSIOLSDjSyncSetOptions(&lsdjSync, offset, outDelay, pace);
+		break;
+#endif
+	default:
+		break;
+	}
 }
 
-static bool _containsFMS(const char* s) {
-	size_t i;
-	for (i = 0; s && s[i] && s[i + 1] && s[i + 2]; ++i) {
-		if ((s[i] == 'F' || s[i] == 'f') && (s[i + 1] == 'M' || s[i + 1] == 'm') && (s[i + 2] == 'S' || s[i + 2] == 's')) {
+static bool _containsWord(const char* s, const char* word) {
+	size_t len = strlen(word);
+	size_t i, j;
+	for (i = 0; s && s[i]; ++i) {
+		for (j = 0; j < len; ++j) {
+			char c = s[i + j];
+			if (!c || toupper((unsigned char) c) != word[j]) {
+				break;
+			}
+		}
+		if (j == len) {
 			return true;
 		}
 	}
 	return false;
 }
 
-static bool _wantMidiSync(const char* path) {
+/* word must be upper case, e.g. "FMS" or "LSDJ" */
+static bool _wantMidiSync(const char* path, const char* word) {
 	const char* mode = "auto";
 	struct retro_variable var = { .key = "mgba_midisync_mode", .value = 0 };
 	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
@@ -127,16 +168,49 @@ static bool _wantMidiSync(const char* path) {
 	struct mGameInfo info;
 	memset(&info, 0, sizeof(info));
 	core->getGameInfo(core, &info);
-	if (_containsFMS(info.title)) {
+	if (_containsWord(info.title, word)) {
 		return true;
 	}
 	if (path) {
 		const char* base = strrchr(path, '/');
-		return _containsFMS(base ? base + 1 : path);
+		return _containsWord(base ? base + 1 : path, word);
 	}
 	return false;
 }
+
+static void _midiSyncEnsureRunning(void) {
+	switch (midiSyncKind) {
+#ifdef M_CORE_GBA
+	case MIDI_SYNC_FMS:
+		GBASIOFMSSyncEnsureRunning(&fmsSync);
+		break;
 #endif
+#ifdef M_CORE_GB
+	case MIDI_SYNC_LSDJ:
+		GBSIOLSDjSyncEnsureRunning(&lsdjSync);
+		break;
+#endif
+	default:
+		break;
+	}
+}
+
+/* false: skip this frame, emulation is a whole frame ahead of real time */
+static bool _midiSyncPaceFrame(void) {
+	double frameMs = core->frameCycles(core) * 1000.0 / (double) core->frequency(core);
+	switch (midiSyncKind) {
+#ifdef M_CORE_GBA
+	case MIDI_SYNC_FMS:
+		return GBASIOFMSSyncPaceFrame(&fmsSync, frameMs);
+#endif
+#ifdef M_CORE_GB
+	case MIDI_SYNC_LSDJ:
+		return GBSIOLSDjSyncPaceFrame(&lsdjSync, frameMs);
+#endif
+	default:
+		return true;
+	}
+}
 static mColor* outputBuffer = NULL;
 static int16_t *audioSampleBuffer = NULL;
 static size_t audioSampleBufferSize;
@@ -626,11 +700,7 @@ void retro_run(void) {
 
 	inputPollCallback();
 
-#ifdef M_CORE_GBA
-	if (midiSyncAttached) {
-		GBASIOMidiSyncEnsureRunning(&midiSync);
-	}
-#endif
+	_midiSyncEnsureRunning();
 
 	bool updated = false;
 	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated) {
@@ -646,11 +716,9 @@ void retro_run(void) {
 		}
 
 		_loadAudioLowPassFilterSettings();
-#ifdef M_CORE_GBA
-		if (midiSyncAttached) {
+		if (midiSyncKind != MIDI_SYNC_NONE) {
 			_loadMidiSyncOptions();
 		}
-#endif
 		var.key = "mgba_frameskip";
 		var.value = 0;
 		if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
@@ -700,14 +768,13 @@ void retro_run(void) {
 	}
 
 	unsigned width, height;
-#ifdef M_CORE_GBA
-	if (midiSyncAttached && !GBASIOMidiSyncPaceFrame(&midiSync, core->frameCycles(core) / (double) core->frequency(core))) {
+	gameRunning = true;
+	if (midiSyncKind != MIDI_SYNC_NONE && !_midiSyncPaceFrame()) {
 		/* Emulation is a frame ahead of real time: show the same picture again */
 		core->currentVideoSize(core, &width, &height);
 		videoCallback(outputBuffer, width, height, BYTES_PER_PIXEL * 256);
 		return;
 	}
-#endif
 	core->runFrame(core);
 	core->currentVideoSize(core, &width, &height);
 	videoCallback(outputBuffer, width, height, BYTES_PER_PIXEL * 256);
@@ -1027,10 +1094,10 @@ bool retro_load_game(const struct retro_game_info* game) {
 	if (core->platform(core) == mPLATFORM_GBA) {
 		core->setPeripheral(core, mPERIPH_GBA_LUMINANCE, &lux);
 		biosName = "gba_bios.bin";
-		if (_wantMidiSync(game->path)) {
-			GBASIOMidiSyncCreate(&midiSync);
-			core->setPeripheral(core, mPERIPH_GBA_LINK_PORT, &midiSync.d);
-			midiSyncAttached = true;
+		if (_wantMidiSync(game->path, "FMS")) {
+			GBASIOFMSSyncCreate(&fmsSync);
+			core->setPeripheral(core, mPERIPH_GBA_LINK_PORT, &fmsSync.d);
+			midiSyncKind = MIDI_SYNC_FMS;
 			_loadMidiSyncOptions();
 		}
 
@@ -1039,6 +1106,12 @@ bool retro_load_game(const struct retro_game_info* game) {
 
 #ifdef M_CORE_GB
 	if (core->platform(core) == mPLATFORM_GB) {
+		if (_wantMidiSync(game->path, "LSDJ")) {
+			GBSIOLSDjSyncCreate(&lsdjSync, core->timingFrequency(core));
+			GBSIOSetDriver(&((struct GB*) core->board)->sio, &lsdjSync.d);
+			midiSyncKind = MIDI_SYNC_LSDJ;
+			_loadMidiSyncOptions();
+		}
 		memset(&cam, 0, sizeof(cam));
 		cam.height = GBCAM_HEIGHT;
 		cam.width = GBCAM_WIDTH;
@@ -1095,10 +1168,17 @@ void retro_unload_game(void) {
 		return;
 	}
 	mCoreConfigDeinit(&core->config);
-#ifdef M_CORE_GBA
-	midiSyncAttached = false;
-#endif
+	enum MidiSyncKind kind = midiSyncKind;
+	midiSyncKind = MIDI_SYNC_NONE;
+	gameRunning = false;
 	core->deinit(core);
+#ifdef M_CORE_GB
+	if (kind == MIDI_SYNC_LSDJ) {
+		GBSIOLSDjSyncDestroy(&lsdjSync);
+	}
+#else
+	UNUSED(kind);
+#endif
 #ifdef M_CORE_GBA
 	if (gbaResamplerActive) {
 		mAudioResamplerDeinit(&gbaResampler);
@@ -1364,6 +1444,10 @@ static void _audioRateChanged(struct mAVStream* stream, unsigned rate) {
 		return;
 	}
 #endif
+	if (!gameRunning) {
+		/* RetroArch reads the AV info after loading anyway */
+		return;
+	}
 	struct retro_system_av_info info;
 	retro_get_system_av_info(&info);
 	environCallback(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
