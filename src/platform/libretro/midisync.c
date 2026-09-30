@@ -439,6 +439,10 @@ static void _pollEvent(struct mTiming* timing, void* context, uint32_t cyclesLat
 		struct stat st;
 		if (stat(CONFIG_PATH, &st) == 0 && st.st_mtime != m->configMtime) {
 			m->configMtime = st.st_mtime;
+			/* keys removed from the file fall back to their defaults */
+			m->offsetMs = 0;
+			m->leadTicks = 0;
+			m->clockDiv = 1;
 			_loadConfig(m);
 			_log(m, "config reloaded: offset_ms=%.1f lead_ticks=%d", m->offsetMs, m->leadTicks);
 		}
