@@ -29,6 +29,9 @@
 #include "libretro_core_options.h"
 #include "midisync.h"
 
+#include <mgba-util/audio-buffer.h>
+#include <mgba-util/audio-resampler.h>
+
 #define GB_SAMPLES 512
 /* An alpha factor of 1/180 is *somewhat* equivalent
  * to calculating the average for the last 180
@@ -70,6 +73,14 @@ static struct mCore* core;
 #ifdef M_CORE_GBA
 static struct GBASIOMidiSync midiSync;
 static bool midiSyncAttached = false;
+/* GBA audio is resampled to a fixed rate here instead of asking RetroArch to
+ * reinitialise audio/video with SET_SYSTEM_AV_INFO whenever a game changes
+ * SOUNDBIAS. On mali-fbdev (TrimUI Brick) that reinit fails to recreate the
+ * EGL surface and RetroArch exits. */
+#define GBA_FIXED_AUDIO_RATE 65536
+static struct mAudioResampler gbaResampler;
+static struct mAudioBuffer gbaResampled;
+static bool gbaResamplerActive = false;
 #endif
 static mColor* outputBuffer = NULL;
 static int16_t *audioSampleBuffer = NULL;
@@ -430,6 +441,11 @@ void retro_get_system_av_info(struct retro_system_av_info* info) {
 
 	info->timing.fps = core->frequency(core) / (float) core->frameCycles(core);
 	info->timing.sample_rate = core->audioSampleRate(core);
+#ifdef M_CORE_GBA
+	if (core->platform(core) == mPLATFORM_GBA) {
+		info->timing.sample_rate = GBA_FIXED_AUDIO_RATE;
+	}
+#endif
 }
 
 void retro_init(void) {
@@ -631,24 +647,18 @@ void retro_run(void) {
 #ifdef M_CORE_GBA
 	if (core->platform(core) == mPLATFORM_GBA) {
 		struct mAudioBuffer *buffer = core->getAudioBuffer(core);
-		int samplesAvail            = mAudioBufferAvailable(buffer);
+		if (gbaResamplerActive) {
+			mAudioResamplerSetSource(&gbaResampler, buffer, core->audioSampleRate(core), true);
+			mAudioResamplerProcess(&gbaResampler);
+			buffer = &gbaResampled;
+		}
+		size_t samplesAvail = mAudioBufferAvailable(buffer);
 		if (samplesAvail > 0) {
-			/* Update 'running average' of number of
-			 * samples per frame.
-			 * Note that this is not a true running
-			 * average, but just a leaky-integrator/
-			 * exponential moving average, used because
-			 * it is simple and fast (i.e. requires no
-			 * window of samples). */
-			audioSamplesPerFrameAvg = (SAMPLES_PER_FRAME_MOVING_AVG_ALPHA * (float)samplesAvail) +
-					((1.0f - SAMPLES_PER_FRAME_MOVING_AVG_ALPHA) * audioSamplesPerFrameAvg);
-			size_t samplesToRead = (size_t)(audioSamplesPerFrameAvg);
-			/* Resize audio output buffer, if required */
-			if (audioSampleBufferSize < (samplesToRead * 2)) {
-				audioSampleBufferSize = (samplesToRead * 2);
+			if (audioSampleBufferSize < samplesAvail * 2) {
+				audioSampleBufferSize = samplesAvail * 2;
 				audioSampleBuffer     = realloc(audioSampleBuffer, audioSampleBufferSize * sizeof(int16_t));
 			}
-			int produced = mAudioBufferRead(buffer, audioSampleBuffer, samplesToRead);
+			int produced = mAudioBufferRead(buffer, audioSampleBuffer, samplesAvail);
 			if (produced > 0) {
 				if (audioLowPassEnabled) {
 					_audioLowPassFilter(audioSampleBuffer, produced);
@@ -906,11 +916,12 @@ bool retro_load_game(const struct retro_game_info* game) {
 		 * for some wriggle room by setting double
 		 * what we need (accounting for the hard
 		 * coded blip buffer limit of 0x4000). */
-		size_t internalAudioBufferSize = audioSamplesPerFrame * 2;
-		if (internalAudioBufferSize > 0x4000) {
-			internalAudioBufferSize = 0x4000;
-		}
-		core->setAudioBufferSize(core, internalAudioBufferSize);
+		/* Games may raise the output rate up to 262144 Hz via SOUNDBIAS */
+		core->setAudioBufferSize(core, 0x4000);
+		mAudioBufferInit(&gbaResampled, 0x4000, 2);
+		mAudioResamplerInit(&gbaResampler, mINTERPOLATOR_COSINE);
+		mAudioResamplerSetDestination(&gbaResampler, &gbaResampled, GBA_FIXED_AUDIO_RATE);
+		gbaResamplerActive = true;
 	} else
 	#endif
 	{
@@ -1017,6 +1028,13 @@ void retro_unload_game(void) {
 	midiSyncAttached = false;
 #endif
 	core->deinit(core);
+#ifdef M_CORE_GBA
+	if (gbaResamplerActive) {
+		mAudioResamplerDeinit(&gbaResampler);
+		mAudioBufferDeinit(&gbaResampled);
+		gbaResamplerActive = false;
+	}
+#endif
 	mappedMemoryFree(data, dataSize);
 	data = 0;
 	mappedMemoryFree(savedata, GBA_SIZE_FLASH1M);
@@ -1268,6 +1286,13 @@ static void _postAudioBuffer(struct mAVStream* stream, struct mAudioBuffer* buff
 
 static void _audioRateChanged(struct mAVStream* stream, unsigned rate) {
 	UNUSED(stream);
+	UNUSED(rate);
+#ifdef M_CORE_GBA
+	if (gbaResamplerActive) {
+		/* Output rate is fixed; the resampler picks up the new source rate */
+		return;
+	}
+#endif
 	struct retro_system_av_info info;
 	retro_get_system_av_info(&info);
 	environCallback(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
