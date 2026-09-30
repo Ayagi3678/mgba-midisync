@@ -27,7 +27,7 @@ Same wire protocol as Arduinoboy:
   clock tempo estimate, offset → early ticks + delay, real-time slicing, emulated ↔ real time mapping
 - `sync-fms.c/.h` – FMS protocol on the GBA link port (`GBASIODriver`)
 - `sync-lsdj.c/.h` – LSDj protocol on the Game Boy link port (`GBSIODriver`)
-- `gba-audio-rate.c` – GBA audio to a fixed 65536 Hz with exact integer ratios (x2, 1, /2, /4)
+- `gba-audio-rate.c` – GBA audio to a fixed 32768 Hz (default) or 65536 Hz with exact integer ratios
 - `libretro.c` – core options, auto-detection, attaching the driver; outputs GBA audio at a fixed
   65536 Hz instead of calling `SET_SYSTEM_AV_INFO` (RetroArch on mali-fbdev dies re-creating the EGL
   surface when FMS changes SOUNDBIAS)

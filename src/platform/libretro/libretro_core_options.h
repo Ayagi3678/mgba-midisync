@@ -175,6 +175,20 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "ON"
    },
    {
+      "mgba_gba_audio_rate",
+      "GBA Audio Output Rate (Restart)",
+      "Output Rate (Restart)",
+      "Fixed sample rate GBA audio is converted to (exact integer ratios, no resampler). 32768 Hz matches the stock core and is lightest for RetroArch; 65536 Hz keeps more treble for games that raise the output rate, such as FMS.",
+      NULL,
+      "audio",
+      {
+         { "32768", "32768 Hz" },
+         { "65536", "65536 Hz" },
+         { NULL, NULL },
+      },
+      "32768"
+   },
+   {
       "mgba_audio_low_pass_filter",
       "Audio Filter",
       "Low Pass Filter",

@@ -11,16 +11,16 @@ void GBAFixedRateReset(struct GBAFixedRate* r) {
 	memset(r, 0, sizeof(*r));
 }
 
-size_t GBAFixedRateConvert(struct GBAFixedRate* r, const int16_t* in, size_t frames, unsigned inRate, int16_t* out) {
+size_t GBAFixedRateConvert(struct GBAFixedRate* r, const int16_t* in, size_t frames, unsigned inRate, unsigned outRate, int16_t* out) {
 	size_t produced = 0;
 	size_t i;
-	if (inRate == GBA_FIXED_AUDIO_RATE) {
+	if (inRate == outRate) {
 		memcpy(out, in, frames * 2 * sizeof(int16_t));
 		r->accCount = 0;
 		return frames;
 	}
-	if (inRate < GBA_FIXED_AUDIO_RATE) {
-		/* 32768 Hz: x2, linear midpoint between neighbouring frames */
+	if (inRate < outRate) {
+		/* 32768 -> 65536 Hz: x2, linear midpoint between neighbouring frames */
 		r->accCount = 0;
 		for (i = 0; i < frames; ++i) {
 			int c;
@@ -34,8 +34,8 @@ size_t GBAFixedRateConvert(struct GBAFixedRate* r, const int16_t* in, size_t fra
 		}
 		return produced;
 	}
-	/* 131072 / 262144 Hz: average each group of 2 / 4 frames (box filter) */
-	unsigned factor = inRate / GBA_FIXED_AUDIO_RATE;
+	/* average each group of 2 / 4 / 8 frames (box filter) */
+	unsigned factor = inRate / outRate;
 	if (factor < 2) {
 		factor = 2;
 	}

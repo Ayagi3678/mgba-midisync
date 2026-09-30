@@ -98,6 +98,7 @@ static bool gameRunning = false;
  * SOUNDBIAS. On mali-fbdev (TrimUI Brick) that reinit fails to recreate the
  * EGL surface and RetroArch exits. */
 static struct GBAFixedRate gbaFixedRate;
+static unsigned gbaOutputRate = GBA_FIXED_AUDIO_RATE_DEFAULT;
 static int16_t* gbaRawBuffer = NULL;
 static size_t gbaRawBufferFrames = 0;
 static bool gbaResamplerActive = false;
@@ -614,7 +615,7 @@ void retro_get_system_av_info(struct retro_system_av_info* info) {
 	info->timing.sample_rate = core->audioSampleRate(core);
 #ifdef M_CORE_GBA
 	if (core->platform(core) == mPLATFORM_GBA) {
-		info->timing.sample_rate = GBA_FIXED_AUDIO_RATE;
+		info->timing.sample_rate = gbaOutputRate;
 	}
 #endif
 	struct MidiHost* host;
@@ -849,7 +850,7 @@ void retro_run(void) {
 				gbaRawBuffer = realloc(gbaRawBuffer, gbaRawBufferFrames * 2 * sizeof(int16_t));
 			}
 			size_t got = mAudioBufferRead(buffer, gbaRawBuffer, samplesAvail);
-			int produced = (int) GBAFixedRateConvert(&gbaFixedRate, gbaRawBuffer, got, core->audioSampleRate(core), audioSampleBuffer);
+			int produced = (int) GBAFixedRateConvert(&gbaFixedRate, gbaRawBuffer, got, core->audioSampleRate(core), gbaOutputRate, audioSampleBuffer);
 			if (produced > 0) {
 				if (audioLowPassEnabled) {
 					_audioLowPassFilter(audioSampleBuffer, produced);
@@ -1110,6 +1111,13 @@ bool retro_load_game(const struct retro_game_info* game) {
 		/* Games may raise the output rate up to 262144 Hz via SOUNDBIAS */
 		core->setAudioBufferSize(core, 0x4000);
 		GBAFixedRateReset(&gbaFixedRate);
+		gbaOutputRate = GBA_FIXED_AUDIO_RATE_DEFAULT;
+		{
+			struct retro_variable var = { .key = "mgba_gba_audio_rate", .value = 0 };
+			if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && strcmp(var.value, "65536") == 0) {
+				gbaOutputRate = 65536;
+			}
+		}
 		gbaResamplerActive = true;
 	} else
 	#endif
