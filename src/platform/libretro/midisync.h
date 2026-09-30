@@ -39,6 +39,8 @@ struct GBASIOMidiSync {
 	unsigned delivered;
 	double startReal;
 	double startEmu;
+	uint64_t emuCycles;
+	uint32_t emuLastNow;
 	unsigned reopenCounter;
 
 	struct mTimingEvent pollEvent;

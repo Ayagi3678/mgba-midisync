@@ -84,7 +84,11 @@ static double _emuMs(struct GBASIOMidiSync* m) {
 		return 0;
 	}
 	struct GBA* gba = m->d.p->p;
-	return mTimingGlobalTime(&gba->timing) * 1000.0 / GBA_ARM7TDMI_FREQUENCY;
+	/* mTimingGlobalTime needs debugger support; accumulate wrap-safe deltas instead */
+	uint32_t now = (uint32_t) mTimingCurrentTime(&gba->timing);
+	m->emuCycles += (uint32_t) (now - m->emuLastNow);
+	m->emuLastNow = now;
+	return m->emuCycles * 1000.0 / GBA_ARM7TDMI_FREQUENCY;
 }
 
 static bool _queuePush(struct GBASIOMidiSync* m, uint8_t byte) {
@@ -271,6 +275,7 @@ static void _pollEvent(struct mTiming* timing, void* context, uint32_t cyclesLat
 		}
 	}
 #endif
+	_emuMs(m);
 	_tryDeliver(m);
 	int32_t next = (int32_t) POLL_CYCLES - (int32_t) cyclesLate;
 	mTimingSchedule(timing, &m->pollEvent, next > 0 ? next : 1);
@@ -329,6 +334,10 @@ static void _reset(struct GBASIODriver* driver) {
 	m->armed = false;
 	m->startPending = false;
 	m->head = m->tail = 0;
+	if (driver->p && driver->p->p) {
+		struct GBA* gba = driver->p->p;
+		m->emuLastNow = (uint32_t) mTimingCurrentTime(&gba->timing);
+	}
 	GBASIOMidiSyncEnsureRunning(m);
 }
 
