@@ -8,7 +8,7 @@ link port to a USB MIDI device (`/dev/snd/midiC*D0`) and speaks the same protoco
 setup would. Developed and tested on a **TrimUI Brick running Knulli** with a **Dirtywave M8** plugged
 into the Brick's USB-C host port.
 
-[日本語の説明はこちら (README_JA.md)](README_JA.md) · [original mGBA README](README-mGBA.md)
+[日本語の説明はこちら (README_JA.md)](README_JA.md) · [mGBA upstream](https://github.com/mgba-emu/mgba)
 
 | | follow MIDI clock | lead MIDI clock |
 |---|---|---|
