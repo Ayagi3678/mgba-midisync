@@ -305,7 +305,7 @@ void MidiHostInit(struct MidiHost* h, const char* name) {
 	h->outEnabled = true;
 	h->logEnabled = true;
 	h->paceEnabled = true;
-	h->outDelayMs = 20;
+	h->outDelayMs = 55;
 #ifdef MIDI_HOST_ENABLED
 	_loadConfig(h);
 	struct stat st;

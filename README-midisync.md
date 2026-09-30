@@ -38,13 +38,15 @@ so early ticks are spread out one per incoming clock.
 
 ## Settings
 
+Defaults were tuned on a TrimUI Brick (Knulli, default RetroArch audio latency) with a Dirtywave M8 over USB; other devices will need different values.
+
 In RetroArch: **Quick Menu → Core Options → MIDI Sync (FMS)**
 
 | Option | Default | |
 |---|---|---|
 | MIDI Sync (Restart) | Auto (FMS / LSDj only) | `Auto` enables the bridge only when the ROM title or file name contains "FMS" (GBA) or "LSDJ" (Game Boy); every other game runs as plain mGBA. `Always` / `Disabled` force it. |
-| Offset (follow MIDI) | 0 ms | The game follows MIDI clock: `+` plays earlier, `-` later. Cancels the emulator's audio latency. Applies from the next MIDI start. The first beat after start can't be pulled earlier. |
-| Clock Out Delay (lead MIDI) | 20 ms | The game leads: delay before each MIDI clock is sent. Set it to the audio latency so external gear lines up from the first beat. |
+| Offset (follow MIDI) | 95 ms | The game follows MIDI clock: `+` plays earlier, `-` later. Cancels the emulator's audio latency. Applies from the next MIDI start. The first beat after start can't be pulled earlier. |
+| Clock Out Delay (lead MIDI) | 55 ms | The game leads: delay before each MIDI clock is sent. Set it to the audio latency so external gear lines up from the first beat. |
 | Real-Time Pacing | On | Skips a frame whenever emulation gets a frame ahead of real time (RetroArch's 60 Hz vsync runs games ~0.5% fast, so they would drift behind MIDI clock). |
 
 Advanced (optional) `/userdata/system/configs/mgba-midisync.cfg`, re-read about once a second:

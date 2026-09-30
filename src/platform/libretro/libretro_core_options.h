@@ -455,7 +455,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
          { "400", "+400 ms" },
          { NULL, NULL },
       },
-      "0"
+      "95"
    },
    {
       "mgba_midisync_out_delay_ms",
@@ -528,7 +528,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
          { "300", "300 ms" },
          { NULL, NULL },
       },
-      "20"
+      "55"
    },
    {
       "mgba_midisync_pace",

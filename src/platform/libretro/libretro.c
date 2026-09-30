@@ -104,7 +104,8 @@ static bool gbaResamplerActive = false;
 #endif
 
 static void _loadMidiSyncOptions(void) {
-	double offset = 0, outDelay = 20;
+	/* defaults match the core option defaults (tuned on a TrimUI Brick + M8) */
+	double offset = 95, outDelay = 55;
 	bool pace = true;
 	struct retro_variable var = { .key = "mgba_midisync_offset_ms", .value = 0 };
 	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
