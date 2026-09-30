@@ -24,7 +24,17 @@ jobs:
           sudo apt-get install -y cmake gcc-aarch64-linux-gnu zip
 
       - name: Build and package
-        run: scripts/build-aarch64.sh "$(git describe --tags --always)"
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+        run: |
+          cmake --version | head -n 1
+          if ! scripts/build-aarch64.sh "$(git describe --tags --always)" > build.log 2>&1; then
+            cat build.log
+            grep -iE 'error|fatal' build.log | head -n 20 | sed 's/^/::error::/'
+            tail -n 15 build.log | sed 's/^/::error::/'
+            exit 1
+          fi
+          tail -n 5 build.log
 
       - uses: actions/upload-artifact@v4
         with:
