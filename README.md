@@ -1,270 +1,125 @@
-mGBA
-====
-
-mGBA is an emulator for running Game Boy Advance games. It aims to be faster and more accurate than many existing Game Boy Advance emulators, as well as adding features that other emulators lack. It also supports Game Boy and Game Boy Color games.
-
-Up-to-date news and downloads can be found at [mgba.io](https://mgba.io/).
-
-[![Build status](https://buildbot.mgba.io/badges/build-win32.svg)](https://buildbot.mgba.io)
-[![Translation status](https://hosted.weblate.org/widgets/mgba/-/svg-badge.svg)](https://hosted.weblate.org/engage/mgba)
-
-Features
---------
-
-- Highly accurate Game Boy Advance hardware support[<sup>[1]</sup>](#missing).
-- Game Boy/Game Boy Color hardware support.
-- Fast emulation. Known to run at full speed even on low end hardware, such as netbooks.
-- Qt and SDL ports for a heavy-weight and a light-weight frontend.
-- Local (same computer) link cable support.
-- Save type detection, even for flash memory size[<sup>[2]</sup>](#flashdetect).
-- Support for cartridges with motion sensors and rumble (only usable with game controllers).
-- Real-time clock support, even without configuration.
-- Solar sensor support for Boktai games.
-- Game Boy Camera and Game Boy Printer support.
-- A built-in BIOS implementation, and ability to load external BIOS files.
-- Scripting support using Lua.
-- Turbo/fast-forward support by holding Tab.
-- Rewind by holding Backquote.
-- Frameskip, configurable up to 10.
-- Screenshot support.
-- Cheat code support.
-- 9 savestate slots. Savestates are also viewable as screenshots.
-- Video, GIF, WebP, and APNG recording.
-- e-Reader support.
-- Remappable controls for both keyboards and gamepads.
-- Loading from ZIP and 7z files.
-- IPS, UPS and BPS patch support.
-- Game debugging via a command-line interface and GDB remote support, compatible with Ghidra and IDA Pro.
-- Configurable emulation rewinding.
-- Support for loading and exporting GameShark and Action Replay snapshots.
-- Cores available for RetroArch/Libretro and OpenEmu.
-- Community-provided translations for several languages via [Weblate](https://hosted.weblate.org/engage/mgba).
-- Many, many smaller things.
-
-#### Game Boy mappers
-
-The following mappers are fully supported:
-
-- MBC1
-- MBC1M
-- MBC2
-- MBC3
-- MBC3+RTC
-- MBC30
-- MBC5
-- MBC5+Rumble
-- MBC7
-- M161
-- Wisdom Tree (unlicensed)
-- NT "old type" 1 and 2 (unlicensed multicart)
-- NT "new type" (unlicensed MBC5-like)
-- Pokémon Jade/Diamond (unlicensed)
-- Sachen MMC1 (unlicensed)
-
-The following mappers are partially supported:
-
-- MBC6 (missing flash memory write support)
-- MMM01
-- Pocket Cam
-- TAMA5 (incomplete RTC support)
-- HuC-1 (missing IR support)
-- HuC-3 (missing IR support)
-- Sachen MMC2 (missing alternate wiring support)
-- BBD (missing logo switching)
-- Hitek (missing logo switching)
-- GGB-81 (missing logo switching)
-- Li Cheng (missing logo switching)
-- Sintax (missing logo switching)
-
-### Planned features
-
-- Networked multiplayer link cable support.
-- Dolphin/JOY bus link cable support.
-- MP2k audio mixing, for higher quality sound than hardware.
-- Re-recording support for tool-assist runs.
-- A comprehensive debug suite.
-- Wireless adapter support.
-
-Supported Platforms
--------------------
-
-- Windows 7 or newer
-- OS X 10.9 (Mavericks)[<sup>[3]</sup>](#osxver) or newer
-- Linux
-- FreeBSD
-- Nintendo 3DS
-- Nintendo Switch
-- Wii
-- PlayStation Vita
-
-Other Unix-like platforms, such as OpenBSD, are known to work as well, but are untested and not fully supported.
-
-### System requirements
-
-Requirements are minimal. Any computer that can run Windows Vista or newer should be able to handle emulation. Support for OpenGL 1.1 or newer is also required, with OpenGL 3.2 or newer for shaders and advanced features.
-
-Downloads
----------
-
-Downloads can be found on the official website, in the [Downloads][downloads] section. The source code can be found on [GitHub][source].
-
-Controls
---------
-
-Controls are configurable in the settings menu. Many game controllers should be automatically mapped by default. The default keyboard controls are as follows:
-
-- **A**: X
-- **B**: Z
-- **L**: A
-- **R**: S
-- **Start**: Enter
-- **Select**: Backspace
-
-Compiling
----------
-
-Compiling requires using CMake 3.1 or newer. GCC, Clang, and Visual Studio 2019 are known to work for compiling mGBA.
-
-#### Docker building
-
-The recommended way to build for most platforms is to use Docker. Several Docker images are provided that contain the requisite toolchain and dependencies for building mGBA across several platforms.
-
-Note: If you are on an older Windows system before Windows 10, you may need to configure your Docker to use VirtualBox shared folders to correctly map your current `mgba` checkout directory to the Docker image's working directory. (See issue [#1985](https://mgba.io/i/1985) for details.)
-
-To use a Docker image to build mGBA, simply run the following command while in the root of an mGBA checkout:
-
-	docker run --rm -it -v ${PWD}:/home/mgba/src mgba/windows:w32
-
-After starting the Docker container, it will produce a `build-win32` directory with the build products. Replace `mgba/windows:w32` with another Docker image for other platforms, which will produce a corresponding other directory. The following Docker images available on Docker Hub:
-
-- mgba/3ds
-- mgba/switch
-- mgba/ubuntu:xenial
-- mgba/ubuntu:bionic
-- mgba/ubuntu:focal
-- mgba/ubuntu:groovy
-- mgba/vita
-- mgba/wii
-- mgba/windows:w32
-- mgba/windows:w64
-
-If you want to speed up the build process, consider adding the flag `-e MAKEFLAGS=-jN` to do a parallel build for mGBA with `N` number of CPU cores.
-
-#### *nix building
-
-To use CMake to build on a Unix-based system, the recommended commands are as follows:
-
-	mkdir build
-	cd build
-	cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr ..
-	make
-	sudo make install
-
-This will build and install mGBA into `/usr/bin` and `/usr/lib`. Dependencies that are installed will be automatically detected, and features that are disabled if the dependencies are not found will be shown after running the `cmake` command after warnings about being unable to find them.
-
-If you are on macOS, the steps are a little different. Assuming you are using the homebrew package manager, the recommended commands to obtain the dependencies and build are:
-
-	brew install cmake ffmpeg libzip qt5 sdl2 libedit lua pkg-config
-	mkdir build
-	cd build
-	cmake -DCMAKE_PREFIX_PATH=`brew --prefix qt5` ..
-	make
-
-Note that you should not do a `make install` on macOS, as it will not work properly.
-
-#### Windows developer building
-
-##### MSYS2
-
-To build on Windows for development, using MSYS2 is recommended. Follow the installation steps found on their [website](https://msys2.github.io). Make sure you're running the 32-bit version ("MSYS2 MinGW 32-bit") (or the 64-bit version "MSYS2 MinGW 64-bit" if you want to build for x86_64) and run this additional command (including the braces) to install the needed dependencies (please note that this involves downloading over 1100MiB of packages, so it will take a long time):
-
-	pacman -Sy --needed base-devel git ${MINGW_PACKAGE_PREFIX}-{cmake,ffmpeg,gcc,gdb,libelf,libepoxy,libzip,lua,pkgconf,qt5,SDL2,ntldd-git}
-
-Check out the source code by running this command:
-
-	git clone https://github.com/mgba-emu/mgba.git
-
-Then finally build it by running these commands:
-
-	mkdir -p mgba/build
-	cd mgba/build
-	cmake .. -G "MSYS Makefiles"
-	make -j$(nproc --ignore=1)
-
-Please note that this build of mGBA for Windows is not suitable for distribution, due to the scattering of DLLs it needs to run, but is perfect for development. However, if distributing such a build is desired (e.g. for testing on machines that don't have the MSYS2 environment installed), running `cpack -G ZIP` will prepare a zip file with all of the necessary DLLs.
-
-##### Visual Studio
-
-To build using Visual Studio is a similarly complicated setup. To begin you will need to install [vcpkg](https://github.com/Microsoft/vcpkg). After installing vcpkg you will need to install several additional packages:
-
-    vcpkg install ffmpeg[vpx,x264] libepoxy libpng libzip lua sdl2 sqlite3
-
-Note that this installation won't support hardware accelerated video encoding on Nvidia hardware. If you care about this, you'll need to install CUDA beforehand, and then substitute `ffmpeg[vpx,x264,nvcodec]` into the previous command.
-
-You will also need to install Qt. Unfortunately due to Qt being owned and run by an ailing company as opposed to a reasonable organization there is no longer an offline open source edition installer for the latest version, so you'll need to either fall back to an [old version installer](https://download.qt.io/archive/qt/5.12/5.12.9/qt-opensource-windows-x86-5.12.9.exe) (which wants you to create an otherwise-useless account, but you can bypass temporarily setting an invalid proxy or otherwise disabling networking), use the online installer (which requires an account regardless), or use vcpkg to build it (slowly). None of these are great options. For the installer you'll want to install the applicable MSVC versions. Note that the offline installers do not support MSVC 2019. For vcpkg you'll want to install it as such, which will take quite a while, especially on quad core or less computers:
-
-    vcpkg install qt5-base qt5-multimedia
-
-Next, open Visual Studio, select Clone Repository, and enter `https://github.com/mgba-emu/mgba.git`. When Visual Studio is done cloning, go to File > CMake and open the CMakeLists.txt file at the root of the checked out repository. From there, mGBA can be developed in Visual Studio similarly to other Visual Studio CMake projects.
-
-#### Toolchain building
-
-If you have devkitARM (for 3DS), devkitPPC (for Wii), devkitA64 (for Switch), or vitasdk (for PS Vita), you can use the following commands for building:
-
-	mkdir build
-	cd build
-	cmake -DCMAKE_TOOLCHAIN_FILE=../src/platform/3ds/CMakeToolchain.txt ..
-	make
-
-Replace the `-DCMAKE_TOOLCHAIN_FILE` parameter for the following platforms:
-
-- 3DS: `../src/platform/3ds/CMakeToolchain.txt`
-- Switch: `../src/platform/switch/CMakeToolchain.txt`
-- Vita: `../src/platform/psp2/CMakeToolchain.vitasdk`
-- Wii: `../src/platform/wii/CMakeToolchain.txt`
-
-### Dependencies
-
-mGBA has no hard dependencies, however, the following optional dependencies are required for specific features. The features will be disabled if the dependencies can't be found.
-
-- Qt 5: for the GUI frontend. Qt Multimedia or SDL are required for audio.
-- SDL: for a more basic frontend and gamepad support in the Qt frontend. SDL 2 is recommended, but 1.2 is supported.
-- zlib and libpng: for screenshot support and savestate-in-PNG support.
-- libedit: for command-line debugger support.
-- ffmpeg or libav: for video, GIF, WebP, and APNG recording.
-- libzip or zlib: for loading ROMs stored in zip files.
-- SQLite3: for game databases.
-- libelf: for ELF loading.
-- Lua: for scripting.
-- json-c: for the scripting `storage` API.
-
-SQLite3, libpng, and zlib are included with the emulator, so they do not need to be externally compiled first.
-
-Footnotes
----------
-
-<a name="missing">[1]</a> Currently missing features are
-
-- OBJ window for modes 3, 4 and 5 ([Bug #5](http://mgba.io/b/5))
-
-<a name="flashdetect">[2]</a> Flash memory size detection does not work in some cases. These can be configured at runtime, but filing a bug is recommended if such a case is encountered.
-
-<a name="osxver">[3]</a> 10.9 is only needed for the Qt port. It may be possible to build or run the Qt port on 10.7 or older, but this is not officially supported. The SDL port is known to work on 10.5, and may work on older.
-
-[downloads]: http://mgba.io/downloads.html
-[source]: https://github.com/mgba-emu/mgba/
-
-Copyright
----------
-
-mGBA is Copyright © 2013 – 2026 Jeffrey Pfau. It is distributed under the [Mozilla Public License version 2.0](https://www.mozilla.org/MPL/2.0/). A copy of the license is available in the distributed LICENSE file.
-
-mGBA contains the following third-party libraries:
-
-- [inih](https://github.com/benhoyt/inih), which is copyright © 2009 – 2020 Ben Hoyt and used under a BSD 3-clause license.
-- [LZMA SDK](http://www.7-zip.org/sdk.html), which is public domain.
-- [MurmurHash3](https://github.com/aappleby/smhasher) implementation by Austin Appleby, which is public domain.
-- [getopt for MSVC](https://github.com/skandhurkat/Getopt-for-Visual-Studio/), which is public domain.
-- [SQLite3](https://www.sqlite.org), which is public domain.
-
-If you are a game publisher and wish to license mGBA for commercial usage, please email [licensing@mgba.io](mailto:licensing@mgba.io) for more information.
+# mgba-midisync
+
+Sync **FMS** (Lo-Bit Club, GBA) and **LSDj** (Game Boy) with USB MIDI gear on a Linux handheld —
+no link cable, no Arduinoboy.
+
+This is a fork of the [mGBA](https://github.com/mgba-emu/mgba) libretro core. It connects the emulated
+link port to a USB MIDI device (`/dev/snd/midiC*D0`) and speaks the same protocol a real link-cable
+setup would. Developed and tested on a **TrimUI Brick running Knulli** with a **Dirtywave M8** plugged
+into the Brick's USB-C host port.
+
+[日本語の説明はこちら (README_JA.md)](README_JA.md) · [original mGBA README](README-mGBA.md)
+
+| | follow MIDI clock | lead MIDI clock |
+|---|---|---|
+| **FMS** | Sync `In`, `GBA to GBA` | Sync `Out`, `GBA to GBA` |
+| **LSDj** | SYNC `MIDI`, press START and wait | SYNC `LSDJ` |
+
+Other games are not affected: the installer adds a separate core and two entries in **Ports**; the
+GBA / Game Boy lists keep using Knulli's stock core.
+
+## Quick start (Knulli)
+
+1. Download `mgba-midisync-<version>-aarch64.zip` from
+   [Releases](https://github.com/Ayagi3678/mgba-midisync/releases) and unzip it.
+2. Copy the folder to the handheld (WinSCP / SFTP: user `root`, password `linux`), e.g. to
+   `/userdata/system/mgba-midisync`.
+3. Over SSH:
+   ```
+   bash /userdata/system/mgba-midisync/install.sh
+   ```
+   It finds your FMS ROM in `/userdata/roms/gba` and LSDj in `/userdata/roms/gb`
+   (file names containing "fms" / "lsdj"), or pass them:
+   `install.sh --fms /path/FMS.gba --lsdj /path/lsdj.gb`.
+4. Plug the MIDI device into the USB host port and start **FMS (MIDI Sync)** or
+   **LSDj (MIDI Sync)** from **Ports**.
+
+Uninstall: `bash uninstall.sh` (saves are left alone).
+
+### Dirtywave M8
+- M8 leads: in the M8's MIDI settings, send clock and transport over USB.
+- FMS / LSDj leads: let the M8 receive clock and transport over USB.
+- Knulli may switch its audio output to the M8 once it's plugged in (volume gets low, the
+  volume item disappears from the menu). Pin the output to the built-in speaker:
+  ```
+  batocera-settings-set audio.device alsa_output._sys_devices_platform_soc_sndcodec_sound_card0.stereo-fallback
+  batocera-audio set alsa_output._sys_devices_platform_soc_sndcodec_sound_card0.stereo-fallback
+  ```
+  (names from `batocera-audio list`). If it's still quiet, check `amixer -c 0 sget Master`.
+
+## Settings
+
+RetroArch **Quick Menu → Core Options → MIDI Sync (FMS / LSDj)**. The defaults were tuned on a
+TrimUI Brick (Knulli, default RetroArch audio latency) with an M8; other setups need other values.
+
+| Option | Default | |
+|---|---|---|
+| MIDI Sync (Restart) | Auto | Bridge on when the ROM title or file name contains "FMS" (GBA) or "LSDJ" (Game Boy). `Always` / `Disabled` force it. |
+| Offset (follow MIDI) | 95 ms | The game follows MIDI: `+` plays earlier, `-` later, to cancel the emulator's audio latency. Applies from the next MIDI start. |
+| Clock Out Delay (lead MIDI) | 55 ms | The game leads: MIDI clock goes out this much later, so gear lines up with what you hear. |
+| Real-Time Pacing (Restart) | On | Emulates exactly the real time that passed on each call, so the game doesn't drift against MIDI clock (60 Hz vsync would run it ~0.5% fast). |
+| Audio → Output Rate (Restart) | 32768 Hz | GBA audio rate handed to RetroArch. 65536 Hz keeps more treble. |
+
+Advanced settings (optional) in `/userdata/system/configs/mgba-midisync.cfg`, re-read about once a second:
+```
+device=/dev/snd/midiC1D0   # default: first rawmidi device that isn't card 0
+clock_div=1                # one tick to the game per N incoming F8
+lead_ticks=0               # -24..24 extra / withheld ticks at start
+in=1                       # 0: ignore incoming MIDI
+out=1                      # 0: don't send MIDI
+log=1                      # /userdata/system/logs/mgba-midisync.log
+```
+
+## Known limits
+- When the game follows MIDI, the very first beat after start is late by the audio latency
+  (a start can't be predicted). Let the game lead, or leave the first bar empty.
+- LSDj `MI.OUT` and `KEYBD` modes are not supported.
+- One MIDI device, Linux only (ALSA rawmidi). Tested on Knulli (TrimUI Brick); other
+  Batocera-based firmware should work with the same installer.
+- Save states aren't compatible with the stock mGBA core (regular saves are).
+
+## How it works
+
+**FMS** uses 8-bit normal-mode transfers: `02` start, `01` clock (24 PPQN), `03` stop.
+
+| FMS Sync | MIDI → link | link → MIDI |
+|---|---|---|
+| In (external clock) | `F8`→`01`, `FA`/`FB`→`02`, `FC`→`03` | — |
+| Out (internal clock) | — | `01`→`F8`, `02`→`FA`, `03`→`FC` |
+
+FMS counts a burst of ticks as one, so ticks sent early (for the offset) are spread out, one per incoming clock.
+
+**LSDj** follows the Arduinoboy protocol: when following, every `F8` between `FA` and `FC` becomes one
+8-bit transfer on LSDj's external clock; when leading, every byte LSDj sends is an `F8` (`FA` before the
+first, `FC` after a few silent ticks). MIDI echoed back while LSDj leads is ignored.
+
+Timing: emulation runs in real-time slices; MIDI out is sent by a thread at the real time each byte
+belongs to (no per-frame clumps); GBA audio goes out at a fixed rate with exact integer ratios, because
+asking RetroArch to reinitialise audio (`SET_SYSTEM_AV_INFO`) when FMS changes its output rate crashes
+RetroArch on mali-fbdev.
+
+### Code (`src/platform/libretro/`)
+- `midi-host.c/.h` – console-agnostic: rawmidi device, config, log, timed MIDI output, tempo
+  estimate, offset math, real-time slicing
+- `sync-fms.c/.h` – FMS on the GBA link port (`GBASIODriver`)
+- `sync-lsdj.c/.h` – LSDj on the Game Boy link port (`GBSIODriver`)
+- `gba-audio-rate.c/.h` – fixed-rate GBA audio
+- `libretro.c`, `libretro_core_options.h` – options, auto-detection, glue
+- `glibc-compat.c` – keeps the .so loadable on glibc 2.35+
+- `knulli/` – installer and uninstaller
+
+## Building
+```
+sudo apt install cmake gcc-aarch64-linux-gnu zip
+scripts/build-aarch64.sh            # -> dist/mgba-midisync-<version>-aarch64.zip
+```
+GitHub Actions builds the same package for every push and attaches it to a release for `v*` tags.
+
+## Credits
+- [mGBA](https://mgba.io) by endrift and contributors (MPL-2.0) — this project keeps the same license.
+- [FMS](https://lo-bit.club/fms) by Lo-Bit Club (ess). Not affiliated; buy FMS on itch.io.
+- [LSDj](https://www.littlesounddj.com) by Johan Kotlinski.
+- LSDj sync protocol as implemented by [Arduinoboy](https://github.com/trash80/arduinoboy) (trash80);
+  no Arduinoboy code is included.
+
+No ROMs are included.
