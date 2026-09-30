@@ -2,7 +2,7 @@
 # Cross-build the libretro core for aarch64 Linux handhelds (e.g. TrimUI Brick)
 # and package it with the Knulli installer.
 #
-# Needs: cmake, gcc-aarch64-linux-gnu (Debian/Ubuntu package names).
+# Needs: cmake, gcc-aarch64-linux-gnu, g++-aarch64-linux-gnu, zip (Debian/Ubuntu package names).
 # Output: dist/mgba-midisync-<version>-aarch64.zip (+ .sha256)
 set -e
 cd "$(dirname "$0")/.."
