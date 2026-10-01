@@ -17,6 +17,10 @@ USBのMIDI機器（`/dev/snd/midiC*D0`）につなぎ、実機でケーブルを
 ほかのゲームには影響しません。インストーラーは別のコアを置き、**Ports**に起動用の項目を2つ足すだけです。
 GBAやゲームボーイの一覧からは、これまでどおりKnulli標準のコアで起動します。
 
+PortsからFMSやLSDjを動かしている間は、CPUのガバナーを `performance`（常に最大クロック）にして、終了時に元に戻します。
+`schedutil` のままだと、メニューや静かな場面でクロックが下がり、戻るまでの数秒間、音が歪んだりテンポが遅くなったりします。
+ガバナーを変えたくない場合は、環境変数 `MGBA_MIDISYNC_KEEP_GOVERNOR=1` を付けてランチャーを起動してください。
+
 ## 導入（Knulli）
 
 1. [Releases](https://github.com/Ayagi3678/mgba-midisync/releases) から `mgba-midisync-<バージョン>-aarch64.zip` をダウンロードして展開する

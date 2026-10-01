@@ -81,7 +81,28 @@ sort_savestates_enable = "false"
 sort_savestates_by_content_enable = "false"
 system_directory = "/userdata/bios"
 CFG
-exec retroarch -L "\$CORE" --config /userdata/system/configs/retroarch/retroarchcustom.cfg --appendconfig "\$APPEND" "\$ROM"
+# Full CPU clock while playing: with schedutil the clock drops in the RetroArch
+# menu and during light passages, and the seconds it takes to come back are
+# heard as distorted audio / a slower tempo. The previous governor is restored
+# on exit. Set MGBA_MIDISYNC_KEEP_GOVERNOR=1 to leave the governor alone.
+GOVS=""
+if [ -z "\$MGBA_MIDISYNC_KEEP_GOVERNOR" ]; then
+	for g in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor; do
+		[ -w "\$g" ] || continue
+		g="\$(readlink -f "\$g")"   # CPUs sharing a policy share this file
+		case " \$GOVS " in *" \$g="*) continue ;; esac
+		GOVS="\$GOVS \$g=\$(cat "\$g")"
+		echo performance > "\$g" 2>/dev/null
+	done
+fi
+restore_governor() {
+	for entry in \$GOVS; do
+		echo "\${entry#*=}" > "\${entry%%=*}" 2>/dev/null
+	done
+}
+trap restore_governor EXIT
+trap 'exit 143' TERM INT HUP
+retroarch -L "\$CORE" --config /userdata/system/configs/retroarch/retroarchcustom.cfg --appendconfig "\$APPEND" "\$ROM"
 EOF
 	chmod +x "$file"
 	echo "  $file"

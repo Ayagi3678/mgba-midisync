@@ -18,6 +18,11 @@ into the Brick's USB-C host port.
 Other games are not affected: the installer adds a separate core and two entries in **Ports**; the
 GBA / Game Boy lists keep using Knulli's stock core.
 
+While FMS / LSDj run from Ports, the CPU governor is set to `performance` and restored on exit:
+with `schedutil` the clock drops in the menu or in quiet passages, and the seconds it takes to come
+back are audible as distorted audio or a slower tempo. To keep your governor, start the launcher with
+`MGBA_MIDISYNC_KEEP_GOVERNOR=1`.
+
 ## Quick start (Knulli)
 
 1. Download `mgba-midisync-<version>-aarch64.zip` from
