@@ -486,13 +486,15 @@ void MidiHostSend(struct MidiHost* h, uint8_t byte, double emuMs) {
 #define PACE_PAUSE_MS 300
 /* Further behind than this: give up catching up and restart the timeline */
 #define PACE_MAX_BEHIND_MS 500
-/* At most this many frames per call; a backlog is caught up a little per call.
- * Running big slices to catch up at once made the Brick spiral after the menu:
- * a long call delayed the next one, which then had even more to run. Normal
- * play on the Brick runs ~2.6 frames per call (RetroArch calls ~24 times a
- * second), so the limit must stay clear of that: at 3 frames it kicked in now
- * and then and the uneven audio was audible as a weaker groove. */
-#define PACE_MAX_RUN_FRAMES 4
+/* How much one call may run. Normally the real time since the previous call
+ * plus one frame of catch-up, so a backlog shrinks by at most a frame per
+ * call: catching up in big slices made the Brick spiral after the menu (a long
+ * call delayed the next one, which then had even more to run). But a fixed
+ * small limit fell behind whenever RetroArch called less often for a while
+ * (85 ms apart for ~5 s on the Brick): the game, and the MIDI clock it sends,
+ * slowed down. So the limit follows the call interval, within these bounds. */
+#define PACE_MIN_RUN_FRAMES 4
+#define PACE_MAX_RUN_FRAMES 8
 
 double MidiHostPaceBudget(struct MidiHost* h, double emuMs, double frameMs) {
 	/* Emulation is run in real-time slices instead of whole frames: each call
@@ -523,7 +525,12 @@ double MidiHostPaceBudget(struct MidiHost* h, double emuMs, double frameMs) {
 		budget = lead;
 	}
 	/* keep single calls short; the rest is run on the next calls */
-	double maxRun = frameMs * PACE_MAX_RUN_FRAMES;
+	double maxRun = sinceLast + frameMs;
+	if (maxRun < frameMs * PACE_MIN_RUN_FRAMES) {
+		maxRun = frameMs * PACE_MIN_RUN_FRAMES;
+	} else if (maxRun > frameMs * PACE_MAX_RUN_FRAMES) {
+		maxRun = frameMs * PACE_MAX_RUN_FRAMES;
+	}
 	if (budget > maxRun) {
 		budget = maxRun;
 		++h->paceCapped;
