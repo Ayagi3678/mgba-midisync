@@ -63,6 +63,7 @@ lead_ticks=0               # -24〜24：スタート時に足す／待つクロ�
 in=1                       # 0：MIDIを受け取らない
 out=1                      # 0：MIDIを送らない
 log=1                      # /userdata/system/logs/mgba-midisync.log
+pace_log=0                 # 1: リアルタイム調整の状況を1秒ごとに記録（不具合報告用）
 ```
 
 ## できないこと

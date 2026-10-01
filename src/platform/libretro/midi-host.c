@@ -240,6 +240,8 @@ static void _loadConfig(struct MidiHost* h) {
 			h->leadTicks = lead > 24 ? 24 : (lead < -24 ? -24 : lead);
 		} else if (!strcmp(key, "log")) {
 			h->logEnabled = atoi(value) != 0;
+		} else if (!strcmp(key, "pace_log")) {
+			h->paceLog = atoi(value) != 0;
 		}
 	}
 	fclose(f);
@@ -352,6 +354,7 @@ size_t MidiHostPoll(struct MidiHost* h, uint8_t* buf, size_t size) {
 			/* keys removed from the file fall back to their defaults */
 			h->leadTicks = 0;
 			h->clockDiv = 1;
+			h->paceLog = false;
 			_loadConfig(h);
 			MidiHostLog(h, "config reloaded: lead_ticks=%d clock_div=%d", h->leadTicks, h->clockDiv);
 		}
@@ -461,6 +464,12 @@ void MidiHostSend(struct MidiHost* h, uint8_t byte, double emuMs) {
  * always has some audio queued. Running exactly on time left it near empty
  * and any scheduling jitter became an underrun (click). */
 #define PACE_LEAD_FRAMES 3
+/* No call for this long: the content was paused (menu, loading) */
+#define PACE_PAUSE_MS 300
+/* Further behind than this: give up catching up and restart the timeline */
+#define PACE_MAX_BEHIND_MS 500
+/* At most this many frames (beyond the lead) per call while catching up */
+#define PACE_MAX_RUN_FRAMES 8
 
 double MidiHostPaceBudget(struct MidiHost* h, double emuMs, double frameMs) {
 	/* Emulation is run in real-time slices instead of whole frames: each call
@@ -471,19 +480,29 @@ double MidiHostPaceBudget(struct MidiHost* h, double emuMs, double frameMs) {
 	 * periodic gap (click) in the audio; slicing keeps the audio continuous. */
 	double now = MidiHostRealMs();
 	double lead = frameMs * PACE_LEAD_FRAMES;
+	double sinceLast = h->paceValid ? now - h->paceLastCall : 0;
+	h->paceLastCall = now;
 	if (!h->paceValid) {
 		h->paceBase = now;
 		h->paceEmuBase = emuMs;
 		h->paceValid = true;
 	}
 	double budget = (now - h->paceBase + lead) - (emuMs - h->paceEmuBase);
-	if (budget > lead + frameMs * 4) {
-		/* Fell far behind (menu, loading, hiccup): restart the timeline */
+	/* Only a real pause (menu, loading) or a large backlog restarts the
+	 * timeline. Being called late now and then is normal on a busy handheld:
+	 * dropping that time would cut the audio and shift the tempo, so catch up
+	 * instead. */
+	if (sinceLast > PACE_PAUSE_MS || budget - lead > PACE_MAX_BEHIND_MS) {
 		++h->framesSkipped;
-		MidiHostLog(h, "pace: restart, %.0fms behind", budget - lead);
+		MidiHostLog(h, "pace: restart, %.0fms behind, %.0fms since last call", budget - lead, sinceLast);
 		h->paceBase = now;
 		h->paceEmuBase = emuMs;
 		budget = lead;
+	}
+	/* keep single calls short; the rest is run on the next calls */
+	double maxRun = lead + frameMs * PACE_MAX_RUN_FRAMES;
+	if (budget > maxRun) {
+		budget = maxRun;
 	}
 	return budget > 0 ? budget : 0;
 }

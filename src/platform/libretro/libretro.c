@@ -267,12 +267,14 @@ static void _paceStatsNote(struct MidiHost* host, struct MidiEmuClock* clock, do
 		paceStats.runMax = runMs;
 	}
 	double real = now - paceStats.windowStart;
-	if (real >= 1000) {
+	if (real >= 1000 && host->paceLog) {
 		double emu = MidiEmuClockMs(clock) - paceStats.emuStart;
 		MidiHostLog(host, "pace: %u calls, emu %.0fms / real %.0fms, audio out %.0f/s at %u Hz, run avg %.1f max %.1fms, gap max %.1fms, restarts +%llu",
 		            paceStats.calls, emu, real, paceStats.audioOut * 1000.0 / real, core->audioSampleRate(core),
 		            paceStats.calls ? paceStats.runSum / paceStats.calls : 0, paceStats.runMax, paceStats.gapMax,
 		            (unsigned long long) (host->framesSkipped - paceStats.restartsStart));
+	}
+	if (real >= 1000) {
 		memset(&paceStats, 0, sizeof(paceStats));
 		paceStats.windowStart = now;
 		paceStats.emuStart = MidiEmuClockMs(clock);
