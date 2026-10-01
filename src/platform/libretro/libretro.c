@@ -29,6 +29,7 @@
 
 #include "libretro_core_options.h"
 #include <ctype.h>
+#include "speaker-volume.h"
 #include "sync-fms.h"
 #include "sync-lsdj.h"
 
@@ -104,6 +105,8 @@ static size_t gbaRawBufferFrames = 0;
 static bool gbaResamplerActive = false;
 #endif
 
+static bool _midiSyncTiming(struct MidiHost** host, struct MidiEmuClock** clock);
+
 static void _loadMidiSyncOptions(void) {
 	/* defaults match the core option defaults (tuned on a TrimUI Brick + M8) */
 	double offset = 95, outDelay = 55;
@@ -122,6 +125,11 @@ static void _loadMidiSyncOptions(void) {
 	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
 		pace = strcmp(var.value, "disabled") != 0;
 	}
+	var.key = "mgba_midisync_speaker_volume";
+	var.value = 0;
+	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		SpeakerVolumeApply(var.value);
+	}
 	switch (midiSyncKind) {
 #ifdef M_CORE_GBA
 	case MIDI_SYNC_FMS:
@@ -135,6 +143,12 @@ static void _loadMidiSyncOptions(void) {
 #endif
 	default:
 		break;
+	}
+	struct MidiHost* host;
+	struct MidiEmuClock* clock;
+	const char* volumeStatus = SpeakerVolumeStatus();
+	if (volumeStatus && _midiSyncTiming(&host, &clock)) {
+		MidiHostLog(host, "%s", volumeStatus);
 	}
 }
 
@@ -1286,6 +1300,7 @@ void retro_unload_game(void) {
 		return;
 	}
 	mCoreConfigDeinit(&core->config);
+	SpeakerVolumeRestore();
 	enum MidiSyncKind kind = midiSyncKind;
 	midiSyncKind = MIDI_SYNC_NONE;
 	gameRunning = false;

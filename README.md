@@ -51,15 +51,8 @@ Uninstall: `bash uninstall.sh` (saves are left alone).
   batocera-audio set alsa_output._sys_devices_platform_soc_sndcodec_sound_card0.stereo-fallback
   ```
   (names from `batocera-audio list`).
-- Still quiet? Check the hardware mixer (Master, 0-49). On the TrimUI Brick it goes back to 20 at boot. Address the built-in card by name (`audiocodec`): with the M8 plugged in at boot, the M8 becomes card 0.
-  ```
-  amixer -c audiocodec sget Master
-  amixer -c audiocodec sset Master 32
-  ```
-  To set it on every boot, add this line to `/userdata/system/custom.sh`:
-  ```
-  if [ "$1" = "start" ]; then (sleep 10; amixer -c audiocodec sset Master 32 >/dev/null) & fi
-  ```
+- Still quiet? Raise the built-in speaker (mixer Master) with the **Speaker Volume** core option. The
+  TrimUI Brick drops it to 41% at boot; the previous value comes back when you close the game.
 
 ## Settings
 
@@ -71,6 +64,7 @@ TrimUI Brick (Knulli, default RetroArch audio latency) with an M8; other setups 
 | MIDI Sync (Restart) | Auto | Bridge on when the ROM title or file name contains "FMS" (GBA) or "LSDJ" (Game Boy). `Always` / `Disabled` force it. |
 | Offset (follow MIDI) | 95 ms | The game follows MIDI: `+` plays earlier, `-` later, to cancel the emulator's audio latency. Applies from the next MIDI start. |
 | Clock Out Delay (lead MIDI) | 55 ms | The game leads: MIDI clock goes out this much later, so gear lines up with what you hear. |
+| Speaker Volume | unchanged | Hardware volume (mixer Master) of the built-in sound card while the game runs; restored on exit. |
 | Real-Time Pacing (Restart) | On | Emulates exactly the real time that passed on each call, so the game doesn't drift against MIDI clock (60 Hz vsync would run it ~0.5% fast). |
 | Audio → Output Rate (Restart) | 32768 Hz | GBA audio rate handed to RetroArch. 65536 Hz keeps more treble. |
 

@@ -558,6 +558,36 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       },
       "enabled"
    },
+   {
+      "mgba_midisync_speaker_volume",
+      "MIDI Sync: Speaker Volume",
+      "Speaker Volume",
+      "Hardware volume (ALSA Master) of the handheld's built-in sound card while the game runs; the previous value is restored when the game is closed. The TrimUI Brick resets it to a low 41% at boot.",
+      NULL,
+      "midisync",
+      {
+         { "unchanged", NULL },
+         { "20%", NULL },
+         { "25%", NULL },
+         { "30%", NULL },
+         { "35%", NULL },
+         { "40%", NULL },
+         { "45%", NULL },
+         { "50%", NULL },
+         { "55%", NULL },
+         { "60%", NULL },
+         { "65%", NULL },
+         { "70%", NULL },
+         { "75%", NULL },
+         { "80%", NULL },
+         { "85%", NULL },
+         { "90%", NULL },
+         { "95%", NULL },
+         { "100%", NULL },
+         { NULL, NULL },
+      },
+      "unchanged"
+   },
    { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
 };
 

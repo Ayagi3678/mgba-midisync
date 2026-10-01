@@ -45,15 +45,7 @@ PortsからFMSやLSDjを動かしている間は、CPUのガバナーを `perfor
   batocera-audio set alsa_output._sys_devices_platform_soc_sndcodec_sound_card0.stereo-fallback
   ```
   （名前は `batocera-audio list` で確認できます）。
-- それでも小さいときは本体のミキサー（Master、0〜49）を確認してください。TrimUI Brickでは起動時に20に戻ります。M8を挿したまま起動するとM8がカード0になるので、本体のカードは番号ではなく名前（`audiocodec`）で指定します。
-  ```
-  amixer -c audiocodec sget Master
-  amixer -c audiocodec sset Master 32
-  ```
-  起動のたびに設定するには、`/userdata/system/custom.sh` に次の1行を足します。
-  ```
-  if [ "$1" = "start" ]; then (sleep 10; amixer -c audiocodec sset Master 32 >/dev/null) & fi
-  ```
+- それでも小さいときは、コアオプションの **Speaker Volume** で本体の音量（ミキサーのMaster）を上げてください。TrimUI Brickは起動時に41%まで下がります。ゲームを終了すると元の値に戻ります。
 
 ## 設定
 
@@ -65,6 +57,7 @@ RetroArchの **Quick Menu → コアオプション → MIDI Sync (FMS / LSDj)**
 | MIDI Sync (Restart) | Auto | ROMのタイトルかファイル名に「FMS」（GBA）「LSDJ」（ゲームボーイ）が入っているときだけ有効。`Always` / `Disabled` で強制 |
 | Offset (follow MIDI) | 95 ms | ゲームが子のとき。`+` で早く、`-` で遅く。エミュレータの音の遅れを打ち消す。次にMIDIでスタートしたときから反映 |
 | Clock Out Delay (lead MIDI) | 55 ms | ゲームが親のとき。MIDIクロックをこれだけ遅らせて送り、聞こえる音と揃える |
+| Speaker Volume | unchanged | ゲーム中だけ本体の音量（ミキサーのMaster）をこの値にする。終了時に元に戻す |
 | Real-Time Pacing (Restart) | オン | 実際に経った時間ぶんだけエミュレータを動かし、MIDIクロックとずれないようにする（60Hzの画面に合わせると約0.5%速くなってしまうため） |
 | Audio → Output Rate (Restart) | 32768 Hz | RetroArchに渡すGBAの音のレート。65536 Hzにすると高音が残る |
 
