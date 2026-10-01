@@ -249,12 +249,18 @@ static void _loadConfig(struct MidiHost* h) {
 
 /* USB devices have /proc/asound/cardN/usbid; the built-in codec does not */
 static bool _isUsbCard(const char* devPath) {
-	int card = -1;
-	if (sscanf(devPath, "/dev/snd/midiC%dD", &card) != 1 || card < 0) {
+	/* strtol rather than sscanf: sscanf would need glibc 2.38 (__isoc23_sscanf) */
+	static const char prefix[] = "/dev/snd/midiC";
+	if (strncmp(devPath, prefix, sizeof(prefix) - 1) != 0) {
+		return false;
+	}
+	char* end;
+	long card = strtol(devPath + sizeof(prefix) - 1, &end, 10);
+	if (end == devPath + sizeof(prefix) - 1 || *end != 'D' || card < 0) {
 		return false;
 	}
 	char path[64];
-	snprintf(path, sizeof(path), "/proc/asound/card%d/usbid", card);
+	snprintf(path, sizeof(path), "/proc/asound/card%ld/usbid", card);
 	return access(path, F_OK) == 0;
 }
 
