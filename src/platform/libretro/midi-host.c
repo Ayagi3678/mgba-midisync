@@ -468,8 +468,11 @@ void MidiHostSend(struct MidiHost* h, uint8_t byte, double emuMs) {
 #define PACE_PAUSE_MS 300
 /* Further behind than this: give up catching up and restart the timeline */
 #define PACE_MAX_BEHIND_MS 500
-/* At most this many frames (beyond the lead) per call while catching up */
-#define PACE_MAX_RUN_FRAMES 8
+/* At most this many frames per call. Like a normal core, each call runs about
+ * one frame; a backlog is caught up a little per call. Running big slices to
+ * catch up at once made the Brick spiral: a long call delayed the next one,
+ * which then had even more to run. */
+#define PACE_MAX_RUN_FRAMES 3
 
 double MidiHostPaceBudget(struct MidiHost* h, double emuMs, double frameMs) {
 	/* Emulation is run in real-time slices instead of whole frames: each call
@@ -500,7 +503,7 @@ double MidiHostPaceBudget(struct MidiHost* h, double emuMs, double frameMs) {
 		budget = lead;
 	}
 	/* keep single calls short; the rest is run on the next calls */
-	double maxRun = lead + frameMs * PACE_MAX_RUN_FRAMES;
+	double maxRun = frameMs * PACE_MAX_RUN_FRAMES;
 	if (budget > maxRun) {
 		budget = maxRun;
 	}
