@@ -480,6 +480,7 @@ double MidiHostPaceBudget(struct MidiHost* h, double emuMs, double frameMs) {
 	if (budget > lead + frameMs * 4) {
 		/* Fell far behind (menu, loading, hiccup): restart the timeline */
 		++h->framesSkipped;
+		MidiHostLog(h, "pace: restart, %.0fms behind", budget - lead);
 		h->paceBase = now;
 		h->paceEmuBase = emuMs;
 		budget = lead;

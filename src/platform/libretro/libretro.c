@@ -234,6 +234,53 @@ static void _midiSyncFrameEnded(void* context) {
 	}
 }
 
+/* Once a second while pacing: how the slicing actually behaves on the device */
+static struct {
+	double windowStart;
+	double emuStart;
+	double lastCall;
+	double runSum;
+	double runMax;
+	double gapMax;
+	unsigned calls;
+	size_t audioOut;
+	uint64_t restartsStart;
+} paceStats;
+
+static void _paceStatsNote(struct MidiHost* host, struct MidiEmuClock* clock, double callStart, double runMs) {
+	double now = MidiHostRealMs();
+	if (paceStats.windowStart <= 0) {
+		paceStats.windowStart = callStart;
+		paceStats.emuStart = MidiEmuClockMs(clock);
+		paceStats.restartsStart = host->framesSkipped;
+		paceStats.lastCall = callStart;
+		return;
+	}
+	double gap = callStart - paceStats.lastCall;
+	paceStats.lastCall = callStart;
+	if (gap > paceStats.gapMax) {
+		paceStats.gapMax = gap;
+	}
+	++paceStats.calls;
+	paceStats.runSum += runMs;
+	if (runMs > paceStats.runMax) {
+		paceStats.runMax = runMs;
+	}
+	double real = now - paceStats.windowStart;
+	if (real >= 1000) {
+		double emu = MidiEmuClockMs(clock) - paceStats.emuStart;
+		MidiHostLog(host, "pace: %u calls, emu %.0fms / real %.0fms, audio out %.0f/s at %u Hz, run avg %.1f max %.1fms, gap max %.1fms, restarts +%llu",
+		            paceStats.calls, emu, real, paceStats.audioOut * 1000.0 / real, core->audioSampleRate(core),
+		            paceStats.calls ? paceStats.runSum / paceStats.calls : 0, paceStats.runMax, paceStats.gapMax,
+		            (unsigned long long) (host->framesSkipped - paceStats.restartsStart));
+		memset(&paceStats, 0, sizeof(paceStats));
+		paceStats.windowStart = now;
+		paceStats.emuStart = MidiEmuClockMs(clock);
+		paceStats.restartsStart = host->framesSkipped;
+		paceStats.lastCall = callStart;
+	}
+}
+
 /* Run the core so emulated time follows real time. Returns false when
  * pacing is off and the caller should just run a normal frame. */
 static bool _midiSyncRunSliced(void) {
@@ -248,11 +295,13 @@ static bool _midiSyncRunSliced(void) {
 		midiSyncCallbacks = (struct mCoreCallbacks) { .videoFrameEnded = _midiSyncFrameEnded };
 		core->addCoreCallbacks(core, &midiSyncCallbacks);
 	}
+	double callStart = MidiHostRealMs();
 	double frameMs = core->frameCycles(core) * 1000.0 / (double) core->frequency(core);
 	double end = MidiEmuClockMs(clock) + MidiHostPaceBudget(host, MidiEmuClockMs(clock), frameMs);
 	while (MidiEmuClockMs(clock) < end) {
 		core->runLoop(core);
 	}
+	_paceStatsNote(host, clock, callStart, MidiHostRealMs() - callStart);
 	return true;
 }
 static int16_t *audioSampleBuffer = NULL;
@@ -852,6 +901,7 @@ void retro_run(void) {
 			size_t got = mAudioBufferRead(buffer, gbaRawBuffer, samplesAvail);
 			int produced = (int) GBAFixedRateConvert(&gbaFixedRate, gbaRawBuffer, got, core->audioSampleRate(core), gbaOutputRate, audioSampleBuffer);
 			if (produced > 0) {
+				paceStats.audioOut += produced;
 				if (audioLowPassEnabled) {
 					_audioLowPassFilter(audioSampleBuffer, produced);
 				}
