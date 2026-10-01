@@ -1,7 +1,7 @@
 /* Shared MIDI plumbing for link-port sync drivers (libretro build).
  *
  * Advanced config (optional): /userdata/system/configs/mgba-midisync.cfg
- *   device=/dev/snd/midiC1D0   (default: first /dev/snd/midiC*D0 found, skipping card 0)
+ *   device=/dev/snd/midiC1D0   (default: first USB /dev/snd/midiC*D0, else the first one)
  *   clock_div=1                (hand one tick to the console per N incoming F8)
  *   lead_ticks=0               (-24..24 extra/withheld ticks at start)
  *   in=1 / out=1               (0 disables that direction)
@@ -247,14 +247,26 @@ static void _loadConfig(struct MidiHost* h) {
 	fclose(f);
 }
 
+/* USB devices have /proc/asound/cardN/usbid; the built-in codec does not */
+static bool _isUsbCard(const char* devPath) {
+	int card = -1;
+	if (sscanf(devPath, "/dev/snd/midiC%dD", &card) != 1 || card < 0) {
+		return false;
+	}
+	char path[64];
+	snprintf(path, sizeof(path), "/proc/asound/card%d/usbid", card);
+	return access(path, F_OK) == 0;
+}
+
 static bool _findDevice(char* out, size_t size) {
 	glob_t g;
 	bool found = false;
 	if (glob("/dev/snd/midiC*D0", 0, NULL, &g) == 0) {
 		size_t i;
-		/* card 0 is usually the built-in codec; prefer USB devices */
+		/* Prefer USB MIDI. Card numbers change with plug order (an M8 present
+		 * at boot becomes card 0), so don't go by number. */
 		for (i = 0; i < g.gl_pathc && !found; ++i) {
-			if (strncmp(g.gl_pathv[i], "/dev/snd/midiC0D", 16) != 0) {
+			if (_isUsbCard(g.gl_pathv[i])) {
 				strncpy(out, g.gl_pathv[i], size - 1);
 				out[size - 1] = '\0';
 				found = true;

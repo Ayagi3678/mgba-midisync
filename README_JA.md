@@ -41,14 +41,14 @@ GBAやゲームボーイの一覧からは、これまでどおりKnulli標準�
   batocera-audio set alsa_output._sys_devices_platform_soc_sndcodec_sound_card0.stereo-fallback
   ```
   （名前は `batocera-audio list` で確認できます）。
-- それでも小さいときは本体のミキサー（Master、0〜49）を確認してください。TrimUI Brickでは起動時に20に戻ります。
+- それでも小さいときは本体のミキサー（Master、0〜49）を確認してください。TrimUI Brickでは起動時に20に戻ります。M8を挿したまま起動するとM8がカード0になるので、本体のカードは番号ではなく名前（`audiocodec`）で指定します。
   ```
-  amixer -c 0 sget Master
-  amixer -c 0 sset Master 32
+  amixer -c audiocodec sget Master
+  amixer -c audiocodec sset Master 32
   ```
   起動のたびに設定するには、`/userdata/system/custom.sh` に次の1行を足します。
   ```
-  if [ "$1" = "start" ]; then (sleep 10; amixer -c 0 sset Master 32 >/dev/null) & fi
+  if [ "$1" = "start" ]; then (sleep 10; amixer -c audiocodec sset Master 32 >/dev/null) & fi
   ```
 
 ## 設定
@@ -66,7 +66,7 @@ RetroArchの **Quick Menu → コアオプション → MIDI Sync (FMS / LSDj)**
 
 細かい設定（任意）は `/userdata/system/configs/mgba-midisync.cfg` に書きます。約1秒ごとに読み直されます。
 ```
-device=/dev/snd/midiC1D0   # 省略時：card 0 以外の最初のMIDI機器
+device=/dev/snd/midiC1D0   # 省略時：最初のUSB MIDI機器
 clock_div=1                # F8 何個でゲームに1クロック渡すか
 lead_ticks=0               # -24〜24：スタート時に足す／待つクロック数
 in=1                       # 0：MIDIを受け取らない

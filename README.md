@@ -46,14 +46,14 @@ Uninstall: `bash uninstall.sh` (saves are left alone).
   batocera-audio set alsa_output._sys_devices_platform_soc_sndcodec_sound_card0.stereo-fallback
   ```
   (names from `batocera-audio list`).
-- Still quiet? Check the hardware mixer (Master, 0-49). On the TrimUI Brick it goes back to 20 at boot.
+- Still quiet? Check the hardware mixer (Master, 0-49). On the TrimUI Brick it goes back to 20 at boot. Address the built-in card by name (`audiocodec`): with the M8 plugged in at boot, the M8 becomes card 0.
   ```
-  amixer -c 0 sget Master
-  amixer -c 0 sset Master 32
+  amixer -c audiocodec sget Master
+  amixer -c audiocodec sset Master 32
   ```
   To set it on every boot, add this line to `/userdata/system/custom.sh`:
   ```
-  if [ "$1" = "start" ]; then (sleep 10; amixer -c 0 sset Master 32 >/dev/null) & fi
+  if [ "$1" = "start" ]; then (sleep 10; amixer -c audiocodec sset Master 32 >/dev/null) & fi
   ```
 
 ## Settings
@@ -71,7 +71,7 @@ TrimUI Brick (Knulli, default RetroArch audio latency) with an M8; other setups 
 
 Advanced settings (optional) in `/userdata/system/configs/mgba-midisync.cfg`, re-read about once a second:
 ```
-device=/dev/snd/midiC1D0   # default: first rawmidi device that isn't card 0
+device=/dev/snd/midiC1D0   # default: first USB MIDI device
 clock_div=1                # one tick to the game per N incoming F8
 lead_ticks=0               # -24..24 extra / withheld ticks at start
 in=1                       # 0: ignore incoming MIDI
