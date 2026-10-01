@@ -45,7 +45,16 @@ Uninstall: `bash uninstall.sh` (saves are left alone).
   batocera-settings-set audio.device alsa_output._sys_devices_platform_soc_sndcodec_sound_card0.stereo-fallback
   batocera-audio set alsa_output._sys_devices_platform_soc_sndcodec_sound_card0.stereo-fallback
   ```
-  (names from `batocera-audio list`). If it's still quiet, check `amixer -c 0 sget Master`.
+  (names from `batocera-audio list`).
+- Still quiet? Check the hardware mixer (Master, 0-49). On the TrimUI Brick it goes back to 20 at boot.
+  ```
+  amixer -c 0 sget Master
+  amixer -c 0 sset Master 32
+  ```
+  To set it on every boot, add this line to `/userdata/system/custom.sh`:
+  ```
+  if [ "$1" = "start" ]; then (sleep 10; amixer -c 0 sset Master 32 >/dev/null) & fi
+  ```
 
 ## Settings
 

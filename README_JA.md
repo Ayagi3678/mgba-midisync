@@ -40,7 +40,16 @@ GBAやゲームボーイの一覧からは、これまでどおりKnulli標準�
   batocera-settings-set audio.device alsa_output._sys_devices_platform_soc_sndcodec_sound_card0.stereo-fallback
   batocera-audio set alsa_output._sys_devices_platform_soc_sndcodec_sound_card0.stereo-fallback
   ```
-  （名前は `batocera-audio list` で確認できます）。それでも小さいときは `amixer -c 0 sget Master` を見てください。
+  （名前は `batocera-audio list` で確認できます）。
+- それでも小さいときは本体のミキサー（Master、0〜49）を確認してください。TrimUI Brickでは起動時に20に戻ります。
+  ```
+  amixer -c 0 sget Master
+  amixer -c 0 sset Master 32
+  ```
+  起動のたびに設定するには、`/userdata/system/custom.sh` に次の1行を足します。
+  ```
+  if [ "$1" = "start" ]; then (sleep 10; amixer -c 0 sset Master 32 >/dev/null) & fi
+  ```
 
 ## 設定
 
