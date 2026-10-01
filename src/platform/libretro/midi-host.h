@@ -88,6 +88,7 @@ struct MidiHost {
 	double paceEmuBase;
 	bool paceLog; /* cfg pace_log=1: pacing stats once a second */
 	double paceLastCall; /* real ms of the previous MidiHostPaceBudget call */
+	uint64_t paceCapped; /* calls limited to PACE_MAX_RUN_FRAMES */
 	uint64_t framesSkipped; /* timeline restarts */
 };
 
