@@ -10,6 +10,10 @@
  *
  * Log: /userdata/system/logs/mgba-midisync.log (falls back to /tmp)
  *
+ * Elsewhere (no /userdata/system, e.g. a Steam Deck) both live in
+ * $XDG_CONFIG_HOME or ~/.config: mgba-midisync.cfg / mgba-midisync.log.
+ * For a Flatpak RetroArch that is ~/.var/app/<id>/config.
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -31,8 +35,6 @@
 #define MIDI_HOST_ENABLED 1
 #endif
 
-#define CONFIG_PATH "/userdata/system/configs/mgba-midisync.cfg"
-#define LOG_PATH "/userdata/system/logs/mgba-midisync.log"
 #define LOG_FALLBACK "/tmp/mgba-midisync.log"
 
 /* polls happen every 0.5 ms of emulated time; ~1 s between slow checks */
@@ -208,8 +210,36 @@ static void _setOutFd(int fd) {
 	pthread_mutex_unlock(&_outMutex);
 }
 
+static char _configPath[512];
+static char _logPath[512];
+
+static void _resolvePaths(void) {
+	struct stat st;
+	if (_configPath[0]) {
+		return;
+	}
+	if (stat("/userdata/system", &st) == 0 && S_ISDIR(st.st_mode)) {
+		/* Knulli / Batocera */
+		snprintf(_configPath, sizeof(_configPath), "/userdata/system/configs/mgba-midisync.cfg");
+		snprintf(_logPath, sizeof(_logPath), "/userdata/system/logs/mgba-midisync.log");
+		return;
+	}
+	const char* xdg = getenv("XDG_CONFIG_HOME");
+	const char* home = getenv("HOME");
+	char base[400];
+	if (xdg && xdg[0]) {
+		snprintf(base, sizeof(base), "%s", xdg);
+	} else if (home && home[0]) {
+		snprintf(base, sizeof(base), "%s/.config", home);
+	} else {
+		snprintf(base, sizeof(base), "/tmp");
+	}
+	snprintf(_configPath, sizeof(_configPath), "%s/mgba-midisync.cfg", base);
+	snprintf(_logPath, sizeof(_logPath), "%s/mgba-midisync.log", base);
+}
+
 static void _loadConfig(struct MidiHost* h) {
-	FILE* f = fopen(CONFIG_PATH, "r");
+	FILE* f = fopen(_configPath, "r");
 	if (!f) {
 		return;
 	}
@@ -327,14 +357,15 @@ void MidiHostInit(struct MidiHost* h, const char* name) {
 	h->paceEnabled = true;
 	h->outDelayMs = 55;
 #ifdef MIDI_HOST_ENABLED
+	_resolvePaths();
 	_loadConfig(h);
 	struct stat st;
-	if (stat(CONFIG_PATH, &st) == 0) {
+	if (stat(_configPath, &st) == 0) {
 		h->configMtime = st.st_mtime;
 	}
 	_outStart();
 	if (h->logEnabled) {
-		h->log = fopen(LOG_PATH, "w");
+		h->log = fopen(_logPath, "w");
 		if (!h->log) {
 			h->log = fopen(LOG_FALLBACK, "w");
 		}
@@ -367,7 +398,7 @@ size_t MidiHostPoll(struct MidiHost* h, uint8_t* buf, size_t size) {
 	if (++h->reloadCounter >= SLOW_CHECK_POLLS) {
 		h->reloadCounter = 0;
 		struct stat st;
-		if (stat(CONFIG_PATH, &st) == 0 && st.st_mtime != h->configMtime) {
+		if (stat(_configPath, &st) == 0 && st.st_mtime != h->configMtime) {
 			h->configMtime = st.st_mtime;
 			/* keys removed from the file fall back to their defaults */
 			h->leadTicks = 0;

@@ -62,6 +62,7 @@ RetroArchの **Quick Menu → コアオプション → MIDI Sync (FMS / LSDj)**
 | Audio → Output Rate (Restart) | 32768 Hz | RetroArchに渡すGBAの音のレート。65536 Hzにすると高音が残る |
 
 細かい設定（任意）は `/userdata/system/configs/mgba-midisync.cfg` に書きます。約1秒ごとに読み直されます。
+（`/userdata` がない環境、たとえばSteam Deckでは `~/.config/mgba-midisync.cfg`。ログも同じ場所です。Flatpak版RetroArchでは `~/.var/app/<アプリID>/config/`）
 ```
 device=/dev/snd/midiC1D0   # 省略時：最初のUSB MIDI機器
 clock_div=1                # F8 何個でゲームに1クロック渡すか

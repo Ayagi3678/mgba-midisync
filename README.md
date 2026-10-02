@@ -68,7 +68,9 @@ TrimUI Brick (Knulli, default RetroArch audio latency) with an M8; other setups 
 | Real-Time Pacing (Restart) | On | Emulates exactly the real time that passed on each call, so the game doesn't drift against MIDI clock (60 Hz vsync would run it ~0.5% fast). |
 | Audio → Output Rate (Restart) | 32768 Hz | GBA audio rate handed to RetroArch. 65536 Hz keeps more treble. |
 
-Advanced settings (optional) in `/userdata/system/configs/mgba-midisync.cfg`, re-read about once a second:
+Advanced settings (optional) in `/userdata/system/configs/mgba-midisync.cfg`, re-read about once a second
+(on systems without `/userdata`, e.g. a Steam Deck: `~/.config/mgba-midisync.cfg`, log next to it;
+for a Flatpak RetroArch `~/.var/app/<app id>/config/`):
 ```
 device=/dev/snd/midiC1D0   # default: first USB MIDI device
 clock_div=1                # one tick to the game per N incoming F8
