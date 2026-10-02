@@ -1,4 +1,4 @@
-name: Build (aarch64)
+name: Build
 
 on:
   push:
@@ -12,8 +12,11 @@ permissions:
   contents: write
 
 jobs:
-  aarch64:
+  build:
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: [aarch64, x86_64]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -27,6 +30,7 @@ jobs:
       - name: Build and package
         env:
           CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+          ARCH: ${{ matrix.arch }}
         run: |
           cmake --version | head -n 1
           if ! scripts/build-aarch64.sh "$(git describe --tags --always)" > build.log 2>&1; then
@@ -39,7 +43,7 @@ jobs:
 
       - uses: actions/upload-artifact@v5
         with:
-          name: mgba-midisync-aarch64
+          name: mgba-midisync-${{ matrix.arch }}
           path: |
             dist/*.zip
             dist/*.sha256
