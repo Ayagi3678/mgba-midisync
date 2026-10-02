@@ -66,10 +66,18 @@ pace_log=1                 # timing stats once a second
 - Audio crackles or tempo changes, especially after opening the RetroArch menu
 - The log, or at least its first lines and any lines with `error`
 
-## Known unknowns
-- **Flatpak sandbox:** the Flatpak may not be allowed to open `/dev/snd/midi*`. If the log says the
-  device could not be opened, try
-  `flatpak override --user --device=all org.libretro.RetroArch`, or use the Steam version.
-- **CPU clock:** on the Brick, the CPU dropping its clock in the menu caused distorted audio and
+## Known issues and unknowns
+- **Sound comes out of the M8 instead of the Deck.** The M8 is also a USB audio device, and SteamOS may
+  switch its output to it when you plug it in. Pick the Deck's speakers (or headphones) again in
+  Steam's sound settings, or in Desktop Mode under Settings > Audio. The same thing happens on Knulli.
+- **Flatpak sandbox:** the Flathub RetroArch has the `pulseaudio` socket and `--device=all`, which
+  include the MIDI devices in `/dev/snd`, so it should be able to open the M8. If you restricted it
+  with Flatseal, give those permissions back. Note that the Flatpak's `/tmp` is private. That's why the
+  log is in the app's config folder.
+- **Steam RetroArch:** it runs inside the Steam Linux Runtime container. That container is known to
+  limit file access (e.g. to SD cards). Whether it passes `/dev/snd/midi*` through hasn't been checked
+  yet. If the log shows no device or a permission error, please try the Flatpak and report it.
+- **CPU clock:** on the Brick, the CPU dropping its clock in the menu caused distorted audio and a
   slower tempo for a few seconds afterwards. Knulli's launcher sets the `performance` governor to
-  avoid it. The Deck may or may not show the same thing.
+  avoid that. It is not known yet whether the Deck shows the same thing. If it does, `pace_log=1`
+  makes it visible in the log.
