@@ -49,6 +49,7 @@ rm -rf "$PKG" "$PKG.zip"
 mkdir -p "$PKG"
 ${TOOLS}strip -o "$PKG/mgba_midisync_libretro.so" "$BUILD/mgba_libretro.so"
 cp knulli/install.sh knulli/uninstall.sh README.md README_JA.md LICENSE "$PKG/"
+[ "$ARCH" = x86_64 ] && cp docs/STEAMDECK.md "$PKG/"
 chmod +x "$PKG"/*.sh
 (cd dist && zip -qr "$(basename "$PKG").zip" "$(basename "$PKG")")
 (cd dist && sha256sum "$(basename "$PKG").zip" > "$(basename "$PKG").zip.sha256")

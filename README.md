@@ -54,6 +54,8 @@ Uninstall: `bash uninstall.sh` (saves are left alone).
 - Still quiet? Raise the built-in speaker (mixer Master) with the **Speaker Volume** core option. The
   TrimUI Brick drops it to 41% at boot; the previous value comes back when you close the game.
 
+Steam Deck: see [docs/STEAMDECK.md](docs/STEAMDECK.md) (x86_64 build, untested so far, testers welcome).
+
 ## Settings
 
 RetroArch **Quick Menu → Core Options → MIDI Sync (FMS / LSDj)**. The defaults were tuned on a
