@@ -87,8 +87,9 @@ pace_log=0                 # 1: real-time pacing stats once a second (for bug re
 - When the game follows MIDI, the very first beat after start is late by the audio latency
   (a start can't be predicted). Let the game lead, or leave the first bar empty.
 - LSDj `MI.OUT` and `KEYBD` modes are not supported.
-- One MIDI device, Linux only (ALSA rawmidi). Tested on Knulli (TrimUI Brick); other
-  Batocera-based firmware should work with the same installer.
+- One MIDI device, Linux only (ALSA rawmidi). Works on Knulli: TrimUI Brick (tested here) and
+  Anbernic RG34XX (reported by a user). Other Batocera-based firmware should work with the same installer.
+  muOS and other firmware aren't supported by the installer yet.
 - Save states aren't compatible with the stock mGBA core (regular saves are).
 
 ## How it works
