@@ -39,14 +39,29 @@ CARD=$(builtin_card)
 if [ ! -f "$CORES_PATH/usb-audio" ] && [ -n "$CARD" ]; then
 	export HOME="$XDG_CONFIG_HOME/home"
 	mkdir -p "$HOME"
-	# Only pick the card; keep the system's own default PCM chain (format /
-	# rate conversion, sharing) that the stock paks use. Opening hw:<card>
-	# through a plain plug failed now and then ("Couldn't set hardware audio
-	# parameters"). This ALSA only takes a card number here, not its name.
-	cat > "$HOME/.asoundrc" <<ASOUND
+	# With the M8 plugged in, opening the built-in card directly (hw / plughw /
+	# default) fails ("Couldn't set hardware audio parameters"); only the
+	# system's own mixing chain (softvol -> dmix, "Playback" in the TrimUI
+	# /etc/asound.conf) works. So point the default PCM at that chain when the
+	# system has it, and otherwise just pick the card (this ALSA only takes a
+	# card number there, not its name).
+	if grep -qs '^pcm\.Playback[[:space:]]' /etc/asound.conf; then
+		cat > "$HOME/.asoundrc" <<ASOUND
+pcm.!default {
+	type plug
+	slave.pcm "Playback"
+}
+ctl.!default {
+	type hw
+	card $CARD
+}
+ASOUND
+	else
+		cat > "$HOME/.asoundrc" <<ASOUND
 defaults.pcm.card $CARD
 defaults.ctl.card $CARD
 ASOUND
+	fi
 fi
 
 # Diagnostics: with an empty file named "alsa-diag" in the mgba-midisync
