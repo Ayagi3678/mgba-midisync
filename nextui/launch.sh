@@ -45,7 +45,12 @@ if [ ! -f "$CORES_PATH/usb-audio" ] && [ -n "$CARD" ]; then
 	# /etc/asound.conf) works. So point the default PCM at that chain when the
 	# system has it, and otherwise just pick the card (this ALSA only takes a
 	# card number there, not its name).
+	# The default PCM still resolved to the M8 even with this .asoundrc (the
+	# system's own .asoundrc gets read regardless of HOME), so SDL is also told
+	# to open that chain by name (minarch only changes AUDIODEV when the
+	# .asoundrc it watches changes, and this one doesn't).
 	if grep -qs '^pcm\.Playback[[:space:]]' /etc/asound.conf; then
+		export AUDIODEV=Playback
 		cat > "$HOME/.asoundrc" <<ASOUND
 pcm.!default {
 	type plug
@@ -77,6 +82,7 @@ if [ -f "$XDG_CONFIG_HOME/alsa-diag" ]; then
 			[ -f "$f" ] && { echo "== $f"; cat "$f"; }
 		done
 		for f in /usr/share/alsa/alsa.conf /etc/alsa/alsa.conf; do
+			[ -f "$f" ] && { echo "== $f (top)"; sed -n '1,60p' "$f"; }
 			[ -f "$f" ] && { echo "== $f (defaults / default pcm)"; grep -nE "^ *defaults\.(pcm|ctl)|pcm\.(!)?default|cards\.pcm\.default|@hooks|func load|files \[" "$f"; }
 		done
 		ls -la /usr/share/alsa /usr/share/alsa/cards /usr/share/alsa/pcm /etc/alsa 2>&1 | head -60
