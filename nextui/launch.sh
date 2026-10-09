@@ -49,4 +49,28 @@ defaults.ctl.card $CARD
 ASOUND
 fi
 
+# Diagnostics: with an empty file named "alsa-diag" in the mgba-midisync
+# folder, record the system's ALSA setup and which sound device the game holds.
+DIAG="$XDG_CONFIG_HOME/alsa-diag.txt"
+if [ -f "$XDG_CONFIG_HOME/alsa-diag" ]; then
+	{
+		echo "== cards"; cat /proc/asound/cards
+		for d in /proc/asound/card[0-9]*; do echo "$d id=$(cat "$d/id" 2>/dev/null) usbid=$(cat "$d/usbid" 2>/dev/null)"; done
+		echo "== pak HOME=$HOME CARD=$CARD"; cat "$HOME/.asoundrc" 2>/dev/null
+		echo "== env"; env | grep -iE "alsa|audiodev|sdl_audio" 
+		for f in /etc/asound.conf /etc/alsa/asound.conf "$USERDATA_PATH/.asoundrc"; do
+			[ -f "$f" ] && { echo "== $f"; cat "$f"; }
+		done
+		for f in /usr/share/alsa/alsa.conf /etc/alsa/alsa.conf; do
+			[ -f "$f" ] && { echo "== $f (defaults / default pcm)"; grep -nE "^ *defaults\.(pcm|ctl)|pcm\.(!)?default|cards\.pcm\.default|@hooks|func load|files \[" "$f"; }
+		done
+		ls -la /usr/share/alsa /usr/share/alsa/cards /usr/share/alsa/pcm /etc/alsa 2>&1 | head -60
+		[ -f /usr/share/alsa/pcm/default.conf ] && { echo "== pcm/default.conf"; cat /usr/share/alsa/pcm/default.conf; }
+		echo "== aplay"; command -v aplay && { aplay -l 2>&1; aplay -L 2>&1 | head -40; }
+	} > "$DIAG" 2>&1
+	( sleep 6
+	  echo "== while playing: open PCM streams" >> "$DIAG"
+	  for f in /proc/asound/card*/pcm*p/sub*/hw_params; do echo "$f:"; cat "$f"; done >> "$DIAG" 2>&1 ) &
+fi
+
 minarch.elf "$CORES_PATH/${EMU_EXE}_libretro.so" "$ROM" > "$LOGS_PATH/$EMU_TAG.txt" 2>&1
