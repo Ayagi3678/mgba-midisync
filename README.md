@@ -82,7 +82,7 @@ lead_ticks=0               # -24..24 extra / withheld ticks at start
 in=1                       # 0: ignore incoming MIDI
 out=1                      # 0: don't send MIDI
 log=1                      # /userdata/system/logs/mgba-midisync.log
-pace_log=0                 # 1: real-time pacing stats once a second (for bug reports)
+pace_log=0                 # 1: timing stats once a second (for bug reports)
 ```
 
 ## Known limits

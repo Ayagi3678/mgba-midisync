@@ -237,39 +237,59 @@ static bool _midiSyncTiming(struct MidiHost** host, struct MidiEmuClock** clock)
 static mColor* presentBuffer = NULL;
 static bool presentReady = false;
 static struct mCoreCallbacks midiSyncCallbacks;
+static unsigned framesEnded; /* frames completed by the core, counted while slicing */
 
 static mColor* outputBuffer = NULL;
 
 static void _midiSyncFrameEnded(void* context) {
 	UNUSED(context);
+	++framesEnded;
 	if (presentBuffer) {
 		memcpy(presentBuffer, outputBuffer, VIDEO_BUFF_SIZE);
 		presentReady = true;
 	}
 }
 
-/* Once a second while pacing: how the slicing actually behaves on the device */
+/* Once a second (cfg pace_log=1): how retro_run actually behaves on the device,
+ * with or without real-time pacing. "frontend" is time spent inside the
+ * frontend's video / audio callbacks (vsync waits, a full audio buffer). */
+static double perfAudioCbMs; /* time in the audio callbacks of the current retro_run */
+
 static struct {
 	double windowStart;
 	double emuStart;
 	double lastCall;
-	double runSum;
-	double runMax;
+	double runSum, runMax;
+	double videoSum, videoMax;
+	double audioSum, audioMax;
 	double gapMax;
 	unsigned calls;
+	unsigned newFrames;
+	unsigned stallCalls;  /* calls that showed no new frame */
+	unsigned stall, stallMax;
 	size_t audioOut;
 	uint64_t restartsStart;
 	uint64_t cappedStart;
 } paceStats;
 
-static void _paceStatsNote(struct MidiHost* host, struct MidiEmuClock* clock, double callStart, double runMs) {
+static void _paceStatsReset(struct MidiHost* host, struct MidiEmuClock* clock, double now, double callStart) {
+	memset(&paceStats, 0, sizeof(paceStats));
+	paceStats.windowStart = now;
+	paceStats.emuStart = MidiEmuClockMs(clock);
+	paceStats.restartsStart = host->framesSkipped;
+	paceStats.cappedStart = host->paceCapped;
+	paceStats.lastCall = callStart;
+}
+
+static void _paceStatsNote(double callStart, double runMs, double videoMs, double audioMs, unsigned newFrames) {
+	struct MidiHost* host;
+	struct MidiEmuClock* clock;
+	if (!_midiSyncTiming(&host, &clock)) {
+		return;
+	}
 	double now = MidiHostRealMs();
 	if (paceStats.windowStart <= 0) {
-		paceStats.windowStart = callStart;
-		paceStats.emuStart = MidiEmuClockMs(clock);
-		paceStats.restartsStart = host->framesSkipped;
-		paceStats.cappedStart = host->paceCapped;
-		paceStats.lastCall = callStart;
+		_paceStatsReset(host, clock, now, callStart);
 		return;
 	}
 	double gap = callStart - paceStats.lastCall;
@@ -279,26 +299,44 @@ static void _paceStatsNote(struct MidiHost* host, struct MidiEmuClock* clock, do
 	}
 	++paceStats.calls;
 	paceStats.runSum += runMs;
+	paceStats.videoSum += videoMs;
+	paceStats.audioSum += audioMs;
 	if (runMs > paceStats.runMax) {
 		paceStats.runMax = runMs;
 	}
+	if (videoMs > paceStats.videoMax) {
+		paceStats.videoMax = videoMs;
+	}
+	if (audioMs > paceStats.audioMax) {
+		paceStats.audioMax = audioMs;
+	}
+	paceStats.newFrames += newFrames;
+	if (newFrames) {
+		paceStats.stall = 0;
+	} else {
+		++paceStats.stallCalls;
+		if (++paceStats.stall > paceStats.stallMax) {
+			paceStats.stallMax = paceStats.stall;
+		}
+	}
 	double real = now - paceStats.windowStart;
-	if (real >= 1000 && host->paceLog) {
+	if (real < 1000) {
+		return;
+	}
+	if (host->paceLog) {
+		unsigned n = paceStats.calls ? paceStats.calls : 1;
 		double emu = MidiEmuClockMs(clock) - paceStats.emuStart;
-		MidiHostLog(host, "pace: %u calls, emu %.0fms / real %.0fms, audio out %.0f/s at %u Hz, run avg %.1f max %.1fms, gap max %.1fms, restarts +%llu, capped +%llu",
-		            paceStats.calls, emu, real, paceStats.audioOut * 1000.0 / real, core->audioSampleRate(core),
-		            paceStats.calls ? paceStats.runSum / paceStats.calls : 0, paceStats.runMax, paceStats.gapMax,
+		MidiHostLog(host, "pace: %s, %u calls, %u new frames (%u calls without, longest %u), emu %.0fms / real %.0fms, "
+		            "audio out %.0f/s at %u Hz, run avg %.1f max %.1fms, frontend video avg %.1f max %.1fms, "
+		            "audio avg %.1f max %.1fms, gap max %.1fms, restarts +%llu, capped +%llu",
+		            host->paceEnabled ? "pacing on" : "pacing off", paceStats.calls, paceStats.newFrames,
+		            paceStats.stallCalls, paceStats.stallMax, emu, real, paceStats.audioOut * 1000.0 / real,
+		            core->audioSampleRate(core), paceStats.runSum / n, paceStats.runMax, paceStats.videoSum / n,
+		            paceStats.videoMax, paceStats.audioSum / n, paceStats.audioMax, paceStats.gapMax,
 		            (unsigned long long) (host->framesSkipped - paceStats.restartsStart),
 		            (unsigned long long) (host->paceCapped - paceStats.cappedStart));
 	}
-	if (real >= 1000) {
-		memset(&paceStats, 0, sizeof(paceStats));
-		paceStats.windowStart = now;
-		paceStats.emuStart = MidiEmuClockMs(clock);
-		paceStats.restartsStart = host->framesSkipped;
-		paceStats.cappedStart = host->paceCapped;
-		paceStats.lastCall = callStart;
-	}
+	_paceStatsReset(host, clock, now, callStart);
 }
 
 /* Run the core so emulated time follows real time. Returns false when
@@ -315,13 +353,11 @@ static bool _midiSyncRunSliced(void) {
 		midiSyncCallbacks = (struct mCoreCallbacks) { .videoFrameEnded = _midiSyncFrameEnded };
 		core->addCoreCallbacks(core, &midiSyncCallbacks);
 	}
-	double callStart = MidiHostRealMs();
 	double frameMs = core->frameCycles(core) * 1000.0 / (double) core->frequency(core);
 	double end = MidiEmuClockMs(clock) + MidiHostPaceBudget(host, MidiEmuClockMs(clock), frameMs);
 	while (MidiEmuClockMs(clock) < end) {
 		core->runLoop(core);
 	}
-	_paceStatsNote(host, clock, callStart, MidiHostRealMs() - callStart);
 	return true;
 }
 static int16_t *audioSampleBuffer = NULL;
@@ -895,14 +931,17 @@ void retro_run(void) {
 
 	unsigned width, height;
 	gameRunning = true;
-	if (_midiSyncRunSliced()) {
-		core->currentVideoSize(core, &width, &height);
-		videoCallback(presentReady ? presentBuffer : outputBuffer, width, height, BYTES_PER_PIXEL * 256);
-	} else {
+	double perfStart = MidiHostRealMs();
+	unsigned framesBefore = framesEnded;
+	perfAudioCbMs = 0; /* GB audio is handed over during the run, GBA audio after it */
+	bool sliced = _midiSyncRunSliced();
+	if (!sliced) {
 		core->runFrame(core);
-		core->currentVideoSize(core, &width, &height);
-		videoCallback(outputBuffer, width, height, BYTES_PER_PIXEL * 256);
 	}
+	double perfRun = MidiHostRealMs() - perfStart;
+	core->currentVideoSize(core, &width, &height);
+	videoCallback(sliced && presentReady ? presentBuffer : outputBuffer, width, height, BYTES_PER_PIXEL * 256);
+	double perfVideo = MidiHostRealMs() - perfStart - perfRun;
 
 #ifdef M_CORE_GBA
 	if (core->platform(core) == mPLATFORM_GBA) {
@@ -925,11 +964,14 @@ void retro_run(void) {
 				if (audioLowPassEnabled) {
 					_audioLowPassFilter(audioSampleBuffer, produced);
 				}
+				double perfAudioStart = MidiHostRealMs();
 				audioCallback(audioSampleBuffer, (size_t)produced);
+				perfAudioCbMs += MidiHostRealMs() - perfAudioStart;
 			}
 		}
 	}
 #endif
+	_paceStatsNote(perfStart, perfRun, perfVideo, perfAudioCbMs, sliced ? framesEnded - framesBefore : 1);
 }
 
 static void _setupMaps(struct mCore* core) {
@@ -1571,10 +1613,13 @@ static void _postAudioBuffer(struct mAVStream* stream, struct mAudioBuffer* buff
 	UNUSED(stream);
 	int produced = mAudioBufferRead(buffer, audioSampleBuffer, GB_SAMPLES);
 	if (produced > 0) {
+		paceStats.audioOut += produced;
 		if (audioLowPassEnabled) {
 			_audioLowPassFilter(audioSampleBuffer, produced);
 		}
+		double perfAudioStart = MidiHostRealMs();
 		audioCallback(audioSampleBuffer, (size_t)produced);
+		perfAudioCbMs += MidiHostRealMs() - perfAudioStart;
 	}
 }
 
