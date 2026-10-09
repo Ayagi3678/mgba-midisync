@@ -50,9 +50,12 @@ menu, the audio is distorted and the tempo drops for a few seconds after you lea
 ## Known issues
 - **Where the sound goes.** NextUI routes all audio to a USB audio device as soon as one is plugged
   in (by writing `.userdata/<platform>/.asoundrc`), and the M8 is one, so the game would go silent on
-  the handheld. The paks run the game with a separate home folder that has no `.asoundrc`, so the sound
-  stays on the handheld's speaker / headphones, also when the M8 is plugged in during play. NextUI's
+  the handheld. The paks run the game with a separate home folder whose `.asoundrc` names the built-in
+  sound card, so the sound stays on the handheld's speaker / headphones, also when the M8 is plugged in
+  during play. NextUI's
   own routing (menu) is left alone. To hear the game through the M8 instead, create an empty file
   named `usb-audio` in the pak's folder. While the M8 is connected, the volume buttons may adjust the
   M8 instead of the speaker.
+- **No sound in any game after plugging / unplugging the M8 a few times** (stock paks too): NextUI's
+  audio routing got out of step. Restart the handheld.
 - **Speaker Volume** (a core option on Knulli) is hidden here: NextUI manages the volume itself.

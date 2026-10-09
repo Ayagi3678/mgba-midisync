@@ -1533,8 +1533,14 @@ void GBARetroLog(struct mLogger* logger, int category, enum mLogLevel level, con
 		retroLevel = RETRO_LOG_WARN;
 		break;
 	case mLOG_INFO:
+#ifdef NDEBUG
+		/* mGBA logs every DMA start at INFO. Frontends that print INFO (NextUI's
+		 * minarch) would write thousands of lines a second to the SD card. */
+		return;
+#else
 		retroLevel = RETRO_LOG_INFO;
 		break;
+#endif
 	case mLOG_GAME_ERROR:
 	case mLOG_STUB:
 #ifdef NDEBUG
