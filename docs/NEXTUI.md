@@ -4,7 +4,7 @@ FMS and LSDj synced to a USB MIDI device (e.g. a Dirtywave M8) on [NextUI](https
 Same core as the Knulli version, built against NextUI's toolchain (the stock TrimUI system has glibc 2.28)
 and packaged as two emulator paks: **FMS.pak** and **LSDJ.pak**.
 
-Status: being tested on a TrimUI Brick. The `tg5050` (Smart Pro S) and `h700` (Anbernic) paks hold the
+Status: tested on a TrimUI Brick. The `tg5050` (Smart Pro S) and `h700` (Anbernic) paks hold the
 same core but haven't been tried yet. Reports are welcome.
 
 ## Install
@@ -46,14 +46,13 @@ menu, the audio is distorted and the tempo drops for a few seconds after you lea
 - NextUI's own log for the game: `.userdata/<platform>/logs/FMS.txt` / `LSDJ.txt`.
 
 ## Known issues
-- **Where the sound goes.** NextUI routes all audio to a USB audio device as soon as one is plugged
-  in (by writing `.userdata/<platform>/.asoundrc`), and the M8 is one, so the game would go silent on
-  the handheld. The paks run the game with a separate home folder whose `.asoundrc` makes the built-in
-  sound card the default, so the sound stays on the handheld's speaker / headphones, also when the M8 is plugged in
-  during play. NextUI's
-  own routing (menu) is left alone. To hear the game through the M8 instead, create an empty file
-  named `usb-audio` in the pak's folder. While the M8 is connected, the volume buttons may adjust the
-  M8 instead of the speaker.
+- **Where the sound goes.** NextUI sends all audio to a USB audio device as soon as one is plugged
+  in, and the M8 is one, so the game would go silent on the handheld. The paks keep the game's sound
+  on the handheld's speaker / headphones, whether the M8 is plugged in before the game starts or
+  during play. NextUI's own routing (menu, other paks) is left alone. Sending the game's sound into
+  the M8's USB input isn't supported yet.
+- **Volume while the M8 is connected.** The volume buttons change the M8's volume, not the
+  speaker's; the speaker stays at the level it had before the M8 was plugged in.
 - **No sound in any game after plugging / unplugging the M8 a few times** (stock paks too): NextUI's
   audio routing got out of step. Restart the handheld.
 - **Speaker Volume** (a core option on Knulli) is hidden here: NextUI manages the volume itself.

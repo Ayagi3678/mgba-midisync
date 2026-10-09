@@ -17,16 +17,4 @@ void SpeakerVolumeRestore(void);
 /* Short description of what the last call did, for the log; NULL if nothing */
 const char* SpeakerVolumeStatus(void);
 
-/* NextUI only (the pak's launch.sh sets MGBA_MIDISYNC_HANDHELD_PCM): pick
- * the sound device minarch opens, through AUDIODEV. value: "handheld" or
- * "usb" (a USB audio device such as the M8, falling back to the handheld when
- * none is plugged in). Returns true when the device changed after the first
- * call; minarch then has to reopen its audio. Does nothing elsewhere. */
-#include <stdbool.h>
-bool AudioOutputSelect(const char* value);
-/* Count of changes after the first selection */
-unsigned AudioOutputChanges(void);
-/* The device chosen last, for the log; NULL when not in use */
-const char* AudioOutputDevice(void);
-
 #endif
