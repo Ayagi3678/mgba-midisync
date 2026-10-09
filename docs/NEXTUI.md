@@ -48,6 +48,10 @@ menu, the audio is distorted and the tempo drops for a few seconds after you lea
 - NextUI's own log for the game: `.userdata/<platform>/logs/FMS.txt` / `LSDJ.txt`.
 
 ## Known issues
-- **Sound comes out of the M8.** The M8 is also a USB audio device, and NextUI may switch its output to
-  it. Switch the output back to the speaker in NextUI's settings.
+- **Where the sound goes.** NextUI routes all audio to a USB audio device as soon as one is plugged
+  in, and the M8 is one, so the game would go silent on the handheld. The paks keep the sound on the
+  handheld's speaker / headphones while the game runs and restore NextUI's routing on exit. To hear
+  the game through the M8 instead, create an empty file named `usb-audio` in the pak's folder. Plug
+  the M8 in before starting the game: plugging it in during play switches the sound to the M8.
+  While the M8 is connected, the volume buttons may adjust the M8 instead of the speaker.
 - **Speaker Volume** (a core option on Knulli) is hidden here: NextUI manages the volume itself.
