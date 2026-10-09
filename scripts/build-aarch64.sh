@@ -74,14 +74,21 @@ if [ "$ARCH" = nextui ]; then
 		done
 	done
 	mkdir -p "$PKG/Roms/FMS (FMS)" "$PKG/Roms/LSDj (LSDJ)"
-	cp docs/NEXTUI.md README.md README_JA.md LICENSE "$PKG/"
+	# keep the SD card root clean: docs and license go next to the paks
+	cp docs/NEXTUI.md "$PKG/Emus/mgba-midisync-README.md"
+	cp LICENSE "$PKG/Emus/mgba-midisync-LICENSE.txt"
 else
 	${TOOLS}strip -o "$PKG/mgba_midisync_libretro.so" "$BUILD/mgba_libretro.so"
 	cp knulli/install.sh knulli/uninstall.sh README.md README_JA.md LICENSE "$PKG/"
 	[ "$ARCH" = x86_64 ] && cp docs/STEAMDECK.md "$PKG/"
 	chmod +x "$PKG"/*.sh
 fi
-(cd dist && zip -qr "$(basename "$PKG").zip" "$(basename "$PKG")")
+if [ "$ARCH" = nextui ]; then
+	# no top-level folder: the zip unpacks straight onto the SD card root
+	(cd "$PKG" && zip -qr "../$(basename "$PKG").zip" Emus Roms)
+else
+	(cd dist && zip -qr "$(basename "$PKG").zip" "$(basename "$PKG")")
+fi
 (cd dist && sha256sum "$(basename "$PKG").zip" > "$(basename "$PKG").zip.sha256")
 echo "built $PKG.zip"
 cat "$PKG.zip.sha256"

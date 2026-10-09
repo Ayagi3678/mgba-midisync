@@ -9,19 +9,17 @@ same core but haven't been tried yet. Reports are welcome.
 
 ## Install
 1. Download `mgba-midisync-<version>-nextui.zip` from
-   [Releases](https://github.com/Ayagi3678/mgba-midisync/releases) and unzip it.
-2. Copy the **contents** of the unzipped folder (`Emus` and `Roms`) to the root of the SD card and merge
-   them with the folders already there.
-3. Put your ROMs in the new folders:
-   - `Roms/FMS (FMS)/` → your FMS `.gba`
-   - `Roms/LSDj (LSDJ)/` → your LSDj `.gb`
+   [Releases](https://github.com/Ayagi3678/mgba-midisync/releases) and unzip it **onto the root of the
+   SD card**. It only adds `Emus/<platform>/FMS.pak`, `Emus/<platform>/LSDJ.pak` and two empty ROM
+   folders. (macOS: unzip it elsewhere and copy the folders with **Merge**, not Replace, so your other
+   ROMs and paks stay.)
+2. Put your ROMs in the new folders: FMS in `Roms/FMS (FMS)/`, LSDj in `Roms/LSDj (LSDJ)/`.
 
-   The `(FMS)` / `(LSDJ)` tag at the end of the folder name is what makes NextUI use these paks. You
-   can rename the part before it.
-4. Plug the M8 into the USB-C port and start the game from the new console entry.
+FMS and LSDj then show up as their own entries in NextUI's menu. Plug in the M8 and start the game.
 
-Saves go to `.userdata/<platform>/` under the `FMS` / `LSDJ` tag, separate from the stock GBA / GB paks.
-To keep an existing LSDj save, copy its `.sav` into the `LSDJ` saves folder (same file name as the ROM).
+The `(FMS)` / `(LSDJ)` tag at the end of the folder name is what makes NextUI use these paks; the part
+before it can be renamed. Saves go to `Saves/FMS/` and `Saves/LSDJ/`, separate from the stock GBA / GB
+paks: to keep an existing LSDj save, copy its `.sav` there (same file name as the ROM).
 
 No ROMs are included. You need your own copies of FMS and LSDj.
 
