@@ -4,6 +4,8 @@
 #
 #   scripts/build-aarch64.sh [version]           # aarch64 (e.g. TrimUI Brick), cross-compiled
 #   ARCH=x86_64 scripts/build-aarch64.sh [version]  # x86_64 (e.g. Steam Deck, Batocera PCs)
+#   ARCH=nextui scripts/build-aarch64.sh [version]  # NextUI paks (glibc 2.28 toolchain, set
+#                                                   # NEXTUI_TOOLCHAIN, see cmake/aarch64-nextui.cmake)
 #
 # Needs: cmake, zip and, for aarch64, gcc-aarch64-linux-gnu, g++-aarch64-linux-gnu
 # (Debian/Ubuntu package names).
@@ -23,7 +25,12 @@ case "$ARCH" in
 		TOOLS=
 		ARCH_FLAGS=()
 		;;
-	*) echo "unknown ARCH $ARCH (aarch64 or x86_64)"; exit 1 ;;
+	nextui)
+		BUILD=build-nextui
+		TOOLS="${NEXTUI_TOOLCHAIN:?set NEXTUI_TOOLCHAIN}/bin/aarch64-nextui-linux-gnu-"
+		ARCH_FLAGS=(-DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/aarch64-nextui.cmake" -DCMAKE_C_FLAGS="-mcpu=cortex-a53")
+		;;
+	*) echo "unknown ARCH $ARCH (aarch64, x86_64 or nextui)"; exit 1 ;;
 esac
 
 cmake -S . -B "$BUILD" "${ARCH_FLAGS[@]}" \
@@ -36,21 +43,44 @@ cmake -S . -B "$BUILD" "${ARCH_FLAGS[@]}" \
 	-DUSE_FREETYPE=OFF -DENABLE_SCRIPTING=OFF -DUSE_JSON_C=OFF
 cmake --build "$BUILD" --target mgba_libretro -j"$(nproc)"
 
-# The core must stay loadable on older handheld firmware (glibc 2.35+)
+# The core must stay loadable on older handheld firmware: glibc 2.35+ (Knulli),
+# 2.28 for NextUI (stock TrimUI system)
 NEWEST="$(${TOOLS}objdump -T "$BUILD/mgba_libretro.so" | grep -oE 'GLIBC_[0-9.]+' | sort -uV | tail -n 1)"
 echo "newest glibc symbol: $NEWEST"
-case "$NEWEST" in
-	GLIBC_2.1[0-9]*|GLIBC_2.2[0-9]*|GLIBC_2.3[0-5]) ;;
-	*) echo "error: needs $NEWEST, expected <= GLIBC_2.35"; exit 1 ;;
-esac
+if [ "$ARCH" = nextui ]; then
+	case "$NEWEST" in
+		GLIBC_2.1[0-9]*|GLIBC_2.2[0-8]) ;;
+		*) echo "error: needs $NEWEST, expected <= GLIBC_2.28"; exit 1 ;;
+	esac
+else
+	case "$NEWEST" in
+		GLIBC_2.1[0-9]*|GLIBC_2.2[0-9]*|GLIBC_2.3[0-5]) ;;
+		*) echo "error: needs $NEWEST, expected <= GLIBC_2.35"; exit 1 ;;
+	esac
+fi
 
 PKG="dist/mgba-midisync-$VERSION-$ARCH"
 rm -rf "$PKG" "$PKG.zip"
 mkdir -p "$PKG"
-${TOOLS}strip -o "$PKG/mgba_midisync_libretro.so" "$BUILD/mgba_libretro.so"
-cp knulli/install.sh knulli/uninstall.sh README.md README_JA.md LICENSE "$PKG/"
-[ "$ARCH" = x86_64 ] && cp docs/STEAMDECK.md "$PKG/"
-chmod +x "$PKG"/*.sh
+if [ "$ARCH" = nextui ]; then
+	# Unzip onto the SD card root: Emus/<platform>/{FMS,LSDJ}.pak and the matching Roms folders
+	for platform in tg5040 tg5050 h700; do
+		for tag in FMS LSDJ; do
+			pak="$PKG/Emus/$platform/$tag.pak"
+			mkdir -p "$pak"
+			${TOOLS}strip -o "$pak/mgba_midisync_libretro.so" "$BUILD/mgba_libretro.so"
+			cp nextui/launch.sh nextui/default.cfg "$pak/"
+			chmod +x "$pak/launch.sh"
+		done
+	done
+	mkdir -p "$PKG/Roms/FMS (FMS)" "$PKG/Roms/LSDj (LSDJ)"
+	cp docs/NEXTUI.md README.md README_JA.md LICENSE "$PKG/"
+else
+	${TOOLS}strip -o "$PKG/mgba_midisync_libretro.so" "$BUILD/mgba_libretro.so"
+	cp knulli/install.sh knulli/uninstall.sh README.md README_JA.md LICENSE "$PKG/"
+	[ "$ARCH" = x86_64 ] && cp docs/STEAMDECK.md "$PKG/"
+	chmod +x "$PKG"/*.sh
+fi
 (cd dist && zip -qr "$(basename "$PKG").zip" "$(basename "$PKG")")
 (cd dist && sha256sum "$(basename "$PKG").zip" > "$(basename "$PKG").zip.sha256")
 echo "built $PKG.zip"

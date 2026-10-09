@@ -47,6 +47,8 @@ PortsからFMSやLSDjを動かしている間は、CPUのガバナーを `perfor
   （名前は `batocera-audio list` で確認できます）。
 - それでも小さいときは、コアオプションの **Speaker Volume** で本体の音量（ミキサーのMaster）を上げてください。TrimUI Brickは起動時に41%まで下がります。ゲームを終了すると元の値に戻ります。
 
+NextUI：[docs/NEXTUI.md](docs/NEXTUI.md)（FMS.pak / LSDJ.pak。テスト中）
+
 Steam Deck：[docs/STEAMDECK.md](docs/STEAMDECK.md)（x86_64版。まだ未確認で、テストしてくれる人を募集中）
 
 ## 設定
