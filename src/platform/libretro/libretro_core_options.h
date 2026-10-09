@@ -588,6 +588,20 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       },
       "unchanged"
    },
+   {
+      "mgba_midisync_audio_output",
+      "MIDI Sync: Audio Output",
+      "Audio Output",
+      "NextUI only. Where the game's sound goes: the handheld's speaker / headphones, or a USB audio device such as the M8 (its USB input), converted to the format the device takes. Falls back to the handheld when no USB audio device is plugged in; after plugging one in during play, switch this option again.",
+      NULL,
+      "midisync",
+      {
+         { "handheld", "Handheld" },
+         { "usb", "USB audio device" },
+         { NULL, NULL },
+      },
+      "handheld"
+   },
    { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
 };
 

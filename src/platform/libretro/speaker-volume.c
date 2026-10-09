@@ -139,3 +139,76 @@ void SpeakerVolumeRestore(void) {
 const char* SpeakerVolumeStatus(void) {
 	return status[0] ? status : NULL;
 }
+
+static char audioDevice[32];
+static unsigned audioChanges;
+
+static int _findUsbPlaybackCard(void) {
+#ifdef SPEAKER_VOLUME_ENABLED
+	int i;
+	for (i = 0; i < 32; ++i) {
+		char path[64];
+		snprintf(path, sizeof(path), "/proc/asound/card%d/usbid", i);
+		if (access(path, F_OK) != 0) {
+			continue;
+		}
+		snprintf(path, sizeof(path), "/proc/asound/card%d/pcm0p", i);
+		if (access(path, F_OK) == 0) {
+			return i;
+		}
+	}
+#endif
+	return -1;
+}
+
+bool AudioOutputSelect(const char* value) {
+	const char* handheld = getenv("MGBA_MIDISYNC_HANDHELD_PCM");
+	if (!handheld) {
+		return false;
+	}
+	if (!handheld[0]) {
+		handheld = "default";
+	}
+	char device[sizeof(audioDevice)];
+	bool usb = false;
+	if (value && strcmp(value, "usb") == 0) {
+		int usbCard = _findUsbPlaybackCard();
+		if (usbCard >= 0) {
+			snprintf(device, sizeof(device), "plughw:%d,0", usbCard);
+			usb = true;
+		}
+	}
+	if (!usb) {
+		snprintf(device, sizeof(device), "%s", handheld);
+	}
+	if (strcmp(device, audioDevice) == 0) {
+		return false;
+	}
+	bool first = !audioDevice[0];
+	snprintf(audioDevice, sizeof(audioDevice), "%s", device);
+#ifdef SPEAKER_VOLUME_ENABLED
+	setenv("AUDIODEV", audioDevice, 1);
+#endif
+	/* tells launch.sh whether to keep the handheld speaker unmuted */
+	const char* state = getenv("MGBA_MIDISYNC_AUDIO_STATE");
+	if (state && state[0]) {
+		FILE* f = fopen(state, "w");
+		if (f) {
+			fputs(usb ? "usb\n" : "handheld\n", f);
+			fclose(f);
+		}
+	}
+	if (first) {
+		return false;
+	}
+	++audioChanges;
+	return true;
+}
+
+unsigned AudioOutputChanges(void) {
+	return audioChanges;
+}
+
+const char* AudioOutputDevice(void) {
+	return audioDevice[0] ? audioDevice : NULL;
+}

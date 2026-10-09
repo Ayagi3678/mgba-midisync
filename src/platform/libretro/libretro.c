@@ -671,6 +671,11 @@ void retro_set_environment(retro_environment_t env) {
 
 	bool categoriesSupported;
 	libretro_set_core_options(environCallback, &categoriesSupported);
+	if (!getenv("MGBA_MIDISYNC_HANDHELD_PCM")) {
+		/* only NextUI's pak can switch the frontend's sound device */
+		struct retro_core_option_display hide = { "mgba_midisync_audio_output", false };
+		environCallback(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY, &hide);
+	}
 }
 
 void retro_set_video_refresh(retro_video_refresh_t video) {
@@ -718,6 +723,16 @@ void retro_get_system_av_info(struct retro_system_av_info* info) {
 
 	info->timing.fps = core->frequency(core) / (float) core->frameCycles(core);
 	info->timing.sample_rate = core->audioSampleRate(core);
+	/* NextUI picks the sound device here (minarch asks for this before it
+	 * opens its audio, and again after option changes). */
+	struct retro_variable outputVar = { .key = "mgba_midisync_audio_output", .value = 0 };
+	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &outputVar) && AudioOutputSelect(outputVar.value)) {
+		struct MidiHost* outputHost;
+		struct MidiEmuClock* outputClock;
+		if (_midiSyncTiming(&outputHost, &outputClock)) {
+			MidiHostLog(outputHost, "audio output: %s", AudioOutputDevice());
+		}
+	}
 #ifdef M_CORE_GBA
 	if (core->platform(core) == mPLATFORM_GBA) {
 		info->timing.sample_rate = gbaOutputRate;
@@ -736,6 +751,11 @@ void retro_get_system_av_info(struct retro_system_av_info* info) {
 			refresh = 60;
 		}
 		info->timing.fps = refresh;
+	}
+	/* minarch only reopens its audio when the reported timing changes, so
+	 * nudge it imperceptibly each time the output device changes */
+	if (AudioOutputChanges() & 1) {
+		info->timing.fps += 0.001;
 	}
 }
 

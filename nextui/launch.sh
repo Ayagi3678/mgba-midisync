@@ -20,14 +20,12 @@ cd "$HOME"
 
 # NextUI sends all audio to a USB audio device as soon as one is plugged in, and
 # the M8 is one: the game would go silent on the handheld (its sound ends up on
-# the M8's USB input). NextUI does this by writing $HOME/.asoundrc, which both
-# ALSA and minarch read from $HOME. minarch gets a HOME of its own whose
-# .asoundrc makes the built-in sound card the default, so the game stays on the handheld's
-# speaker / headphones, also when the M8 is plugged in during play, whatever
-# card numbers the devices got, and NextUI's routing is left alone for the menu.
-# To hear the game through the M8 instead, create an empty file named
-# "usb-audio" in this pak's folder (the M8 has to be plugged in before the
-# game starts; otherwise the sound stays on the handheld).
+# the M8's USB input, opened in a format it can't take). Instead the core picks
+# the device through SDL's AUDIODEV, following its "Audio Output" option:
+# the handheld, or the USB device through plug (which converts to the M8's
+# 24-bit format). minarch gets a HOME of its own, because it reopens its audio
+# with the system default whenever the .asoundrc in HOME changes, which NextUI
+# rewrites on every USB plug / unplug.
 builtin_card() { # number of the first sound card that isn't USB
 	for dir in /proc/asound/card[0-9]*; do
 		[ -d "$dir" ] || continue
@@ -36,51 +34,22 @@ builtin_card() { # number of the first sound card that isn't USB
 		return
 	done
 }
-usb_playback_card() { # number of the first USB sound card that can play
-	for dir in /proc/asound/card[0-9]*; do
-		[ -e "$dir/usbid" ] && [ -d "$dir/pcm0p" ] || continue
-		echo "${dir##*/card}"
-		return
-	done
-}
 CARD=$(builtin_card)
-USB_CARD=
-[ -f "$CORES_PATH/usb-audio" ] && USB_CARD=$(usb_playback_card)
-if [ -n "$USB_CARD" ]; then
-	# Game sound to the USB device (with the M8: into its USB audio input).
-	# NextUI's own routing opens it as raw hw, which only takes the device's
-	# own format (the M8 plays 24-bit only), so the game's 16-bit 32768 Hz
-	# sound couldn't be opened. Go through plug, which converts. Only when
-	# the device is plugged in at launch; it isn't followed if unplugged.
-	export HOME="$XDG_CONFIG_HOME/home"
-	mkdir -p "$HOME"
-	export AUDIODEV="plughw:$USB_CARD,0"
-	cat > "$HOME/.asoundrc" <<ASOUND
-pcm.!default {
-	type plug
-	slave.pcm "hw:$USB_CARD,0"
-}
-ctl.!default {
-	type hw
-	card $USB_CARD
-}
-ASOUND
-elif [ -n "$CARD" ]; then
+if [ -n "$CARD" ]; then
 	export HOME="$XDG_CONFIG_HOME/home"
 	mkdir -p "$HOME"
 	# With the M8 plugged in, opening the built-in card directly (hw / plughw /
 	# default) fails ("Couldn't set hardware audio parameters"); only the
 	# system's own mixing chain (softvol -> dmix, "Playback" in the TrimUI
-	# /etc/asound.conf) works. So point the default PCM at that chain when the
-	# system has it, and otherwise just pick the card (this ALSA only takes a
-	# card number there, not its name).
-	# The default PCM still resolved to the M8 even with this .asoundrc (the
-	# system's own .asoundrc gets read regardless of HOME), so SDL is also told
-	# to open that chain by name (minarch only changes AUDIODEV when the
-	# .asoundrc it watches changes, and this one doesn't).
-	if grep -qs '^pcm\.Playback[[:space:]]' /etc/asound.conf; then
-		export AUDIODEV=Playback
-		KEEP_SPEAKER=1
+	# /etc/asound.conf) works. Elsewhere, fall back to the default device.
+	HANDHELD_PCM=
+	grep -qs '^pcm\.Playback[[:space:]]' /etc/asound.conf && HANDHELD_PCM=Playback
+	export MGBA_MIDISYNC_HANDHELD_PCM="$HANDHELD_PCM"
+	export AUDIODEV="${HANDHELD_PCM:-default}"
+	# the core writes "handheld" or "usb" here
+	export MGBA_MIDISYNC_AUDIO_STATE="$HOME/audio-output"
+	echo handheld > "$MGBA_MIDISYNC_AUDIO_STATE"
+	if [ -n "$HANDHELD_PCM" ]; then
 		cat > "$HOME/.asoundrc" <<ASOUND
 pcm.!default {
 	type plug
@@ -106,7 +75,7 @@ if [ -f "$XDG_CONFIG_HOME/alsa-diag" ]; then
 	{
 		echo "== cards"; cat /proc/asound/cards
 		for d in /proc/asound/card[0-9]*; do echo "$d id=$(cat "$d/id" 2>/dev/null) usbid=$(cat "$d/usbid" 2>/dev/null)"; done
-		echo "== pak HOME=$HOME CARD=$CARD USB_CARD=$USB_CARD"; cat "$HOME/.asoundrc" 2>/dev/null
+		echo "== pak HOME=$HOME CARD=$CARD"; cat "$HOME/.asoundrc" 2>/dev/null
 		echo "== env"; env | grep -iE "alsa|audiodev|sdl_audio" 
 		for f in /etc/asound.conf /etc/alsa/asound.conf "$USERDATA_PATH/.asoundrc"; do
 			[ -f "$f" ] && { echo "== $f"; cat "$f"; }
@@ -121,7 +90,7 @@ if [ -f "$XDG_CONFIG_HOME/alsa-diag" ]; then
 		echo "== fuser"; for d in /dev/snd/pcmC*p; do echo "$d: $(fuser "$d" 2>&1)"; done
 		echo "== playback tests (0.5 s of silence each, same format as the game)"
 		if command -v aplay >/dev/null; then
-			for pcm in default Playback PlaybackDmix "plughw:$CARD,0" "hw:$CARD,0" sysdefault ${USB_CARD:+"plughw:$USB_CARD,0"}; do
+			for pcm in default Playback PlaybackDmix "plughw:$CARD,0" "hw:$CARD,0" sysdefault $(for d in /proc/asound/card[0-9]*; do [ -e "$d/usbid" ] && echo "plughw:${d##*/card},0"; done); do
 				out=$(dd if=/dev/zero bs=65536 count=1 2>/dev/null | aplay -q -D "$pcm" -f S16_LE -r 32768 -c 2 - 2>&1)
 				echo "[$pcm] exit=$? $out"
 			done
@@ -141,13 +110,14 @@ fi
 # minarch mutes the speaker while it starts up and unmutes it when it sets the
 # volume, but while NextUI routes sound to a USB device (the M8) it sets the
 # volume on that device only, so the speaker stays muted (and the DAC volume can
-# be left at 0). Keep the speaker on while the game runs and the M8 is plugged
-# in. The volume buttons then still change the M8's volume, not the speaker's.
-if [ -n "$KEEP_SPEAKER" ]; then
+# be left at 0). Keep the speaker on while the game plays on the handheld and the
+# M8 is plugged in. The volume buttons then still change the M8's volume.
+if [ -n "$CARD" ]; then
 	(
 		LAUNCHER=$$
 		while kill -0 "$LAUNCHER" 2>/dev/null; do
-			if grep -qs 'type hw' "$USERDATA_PATH/.asoundrc"; then
+			if grep -qs 'type hw' "$USERDATA_PATH/.asoundrc" &&
+				[ "$(cat "$MGBA_MIDISYNC_AUDIO_STATE" 2>/dev/null)" = handheld ]; then
 				[ "$(cat /sys/class/speaker/mute 2>/dev/null)" = 1 ] && echo 0 > /sys/class/speaker/mute
 				amixer -c "$CARD" sget 'DAC volume' 2>/dev/null | grep -q 'Front Left: 0 ' &&
 					amixer -q -c "$CARD" sset 'DAC volume' 160
