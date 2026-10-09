@@ -26,7 +26,8 @@ cd "$HOME"
 # speaker / headphones, also when the M8 is plugged in during play, whatever
 # card numbers the devices got, and NextUI's routing is left alone for the menu.
 # To hear the game through the M8 instead, create an empty file named
-# "usb-audio" in this pak's folder.
+# "usb-audio" in this pak's folder (the M8 has to be plugged in before the
+# game starts; otherwise the sound stays on the handheld).
 builtin_card() { # number of the first sound card that isn't USB
 	for dir in /proc/asound/card[0-9]*; do
 		[ -d "$dir" ] || continue
@@ -35,8 +36,36 @@ builtin_card() { # number of the first sound card that isn't USB
 		return
 	done
 }
+usb_playback_card() { # number of the first USB sound card that can play
+	for dir in /proc/asound/card[0-9]*; do
+		[ -e "$dir/usbid" ] && [ -d "$dir/pcm0p" ] || continue
+		echo "${dir##*/card}"
+		return
+	done
+}
 CARD=$(builtin_card)
-if [ ! -f "$CORES_PATH/usb-audio" ] && [ -n "$CARD" ]; then
+USB_CARD=
+[ -f "$CORES_PATH/usb-audio" ] && USB_CARD=$(usb_playback_card)
+if [ -n "$USB_CARD" ]; then
+	# Game sound to the USB device (with the M8: into its USB audio input).
+	# NextUI's own routing opens it as raw hw, which only takes the device's
+	# own format (the M8 plays 24-bit only), so the game's 16-bit 32768 Hz
+	# sound couldn't be opened. Go through plug, which converts. Only when
+	# the device is plugged in at launch; it isn't followed if unplugged.
+	export HOME="$XDG_CONFIG_HOME/home"
+	mkdir -p "$HOME"
+	export AUDIODEV="plughw:$USB_CARD,0"
+	cat > "$HOME/.asoundrc" <<ASOUND
+pcm.!default {
+	type plug
+	slave.pcm "hw:$USB_CARD,0"
+}
+ctl.!default {
+	type hw
+	card $USB_CARD
+}
+ASOUND
+elif [ -n "$CARD" ]; then
 	export HOME="$XDG_CONFIG_HOME/home"
 	mkdir -p "$HOME"
 	# With the M8 plugged in, opening the built-in card directly (hw / plughw /
@@ -77,7 +106,7 @@ if [ -f "$XDG_CONFIG_HOME/alsa-diag" ]; then
 	{
 		echo "== cards"; cat /proc/asound/cards
 		for d in /proc/asound/card[0-9]*; do echo "$d id=$(cat "$d/id" 2>/dev/null) usbid=$(cat "$d/usbid" 2>/dev/null)"; done
-		echo "== pak HOME=$HOME CARD=$CARD"; cat "$HOME/.asoundrc" 2>/dev/null
+		echo "== pak HOME=$HOME CARD=$CARD USB_CARD=$USB_CARD"; cat "$HOME/.asoundrc" 2>/dev/null
 		echo "== env"; env | grep -iE "alsa|audiodev|sdl_audio" 
 		for f in /etc/asound.conf /etc/alsa/asound.conf "$USERDATA_PATH/.asoundrc"; do
 			[ -f "$f" ] && { echo "== $f"; cat "$f"; }
@@ -92,7 +121,7 @@ if [ -f "$XDG_CONFIG_HOME/alsa-diag" ]; then
 		echo "== fuser"; for d in /dev/snd/pcmC*p; do echo "$d: $(fuser "$d" 2>&1)"; done
 		echo "== playback tests (0.5 s of silence each, same format as the game)"
 		if command -v aplay >/dev/null; then
-			for pcm in default Playback PlaybackDmix "plughw:$CARD,0" "hw:$CARD,0" sysdefault; do
+			for pcm in default Playback PlaybackDmix "plughw:$CARD,0" "hw:$CARD,0" sysdefault ${USB_CARD:+"plughw:$USB_CARD,0"}; do
 				out=$(dd if=/dev/zero bs=65536 count=1 2>/dev/null | aplay -q -D "$pcm" -f S16_LE -r 32768 -c 2 - 2>&1)
 				echo "[$pcm] exit=$? $out"
 			done
