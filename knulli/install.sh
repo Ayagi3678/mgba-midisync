@@ -40,7 +40,8 @@ find_rom() { # dir... pattern
 	local d
 	for d in "$@"; do
 		[ -d "$d" ] || continue
-		find "$d" -maxdepth 2 -type f -iname "*${pattern}*" \
+		# skip hidden files, e.g. macOS "._name" metadata copied along with the ROM
+		find "$d" -maxdepth 2 -type f -iname "*${pattern}*" ! -name '.*' \
 			\( -iname '*.gba' -o -iname '*.gb' -o -iname '*.gbc' -o -iname '*.zip' \) 2>/dev/null | sort | head -n 1
 	done | head -n 1
 }
