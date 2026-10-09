@@ -20,41 +20,16 @@ cd "$HOME"
 
 # NextUI sends all audio to a USB audio device as soon as one is plugged in, and
 # the M8 is one: the game would go silent on the handheld (its sound ends up on
-# the M8's USB input). While the game runs, keep the sound on the handheld's
-# speaker / headphones, also when the M8 is plugged in during play, and put
-# NextUI's routing back afterwards. To hear the game through the M8 instead,
-# create an empty file named "usb-audio" in this pak's folder.
-ASOUNDRC="$USERDATA_PATH/.asoundrc"
-ASOUNDRC_SAVED="$USERDATA_PATH/.asoundrc.mgba-midisync"
-WATCHER=""
-
-keep_speaker() { # move NextUI's USB routing aside whenever it shows up
-	while :; do
-		if [ -f "$ASOUNDRC" ] && grep -q "type hw" "$ASOUNDRC"; then
-			mv -f "$ASOUNDRC" "$ASOUNDRC_SAVED"
-		fi
-		sleep 0.2 2>/dev/null || sleep 1
-	done
-}
-
-restore_routing() {
-	[ -n "$WATCHER" ] && kill "$WATCHER" 2>/dev/null
-	[ -f "$ASOUNDRC_SAVED" ] || return
-	# only if that USB card is still there (NextUI deletes the file on unplug)
-	card=$(sed -n 's/^ *card \([0-9][0-9]*\).*/\1/p' "$ASOUNDRC_SAVED" | head -n 1)
-	if [ ! -f "$ASOUNDRC" ] && [ -n "$card" ] && [ -e "/proc/asound/card$card/usbid" ]; then
-		mv -f "$ASOUNDRC_SAVED" "$ASOUNDRC"
-	else
-		rm -f "$ASOUNDRC_SAVED"
-	fi
-}
-
-trap restore_routing EXIT
-trap 'exit 143' TERM INT HUP
+# the M8's USB input). NextUI does this by writing $HOME/.asoundrc, which both
+# ALSA and minarch read from $HOME. Running minarch with a HOME of its own keeps
+# the game on the handheld's speaker / headphones, also when the M8 is plugged
+# in during play, and leaves NextUI's routing untouched for the menu. To hear
+# the game through the M8 instead, create an empty file named "usb-audio" in
+# this pak's folder.
 if [ ! -f "$CORES_PATH/usb-audio" ]; then
-	keep_speaker &
-	WATCHER=$!
-	sleep 0.3 2>/dev/null || sleep 1   # let it move an existing routing before the game opens audio
+	export HOME="$XDG_CONFIG_HOME/home"
+	mkdir -p "$HOME"
+	rm -f "$HOME/.asoundrc"
 fi
 
 minarch.elf "$CORES_PATH/${EMU_EXE}_libretro.so" "$ROM" > "$LOGS_PATH/$EMU_TAG.txt" 2>&1
