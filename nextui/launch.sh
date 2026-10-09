@@ -22,7 +22,7 @@ cd "$HOME"
 # the M8 is one: the game would go silent on the handheld (its sound ends up on
 # the M8's USB input). NextUI does this by writing $HOME/.asoundrc, which both
 # ALSA and minarch read from $HOME. minarch gets a HOME of its own whose
-# .asoundrc names the built-in sound card, so the game stays on the handheld's
+# .asoundrc makes the built-in sound card the default, so the game stays on the handheld's
 # speaker / headphones, also when the M8 is plugged in during play, whatever
 # card numbers the devices got, and NextUI's routing is left alone for the menu.
 # To hear the game through the M8 instead, create an empty file named
@@ -38,15 +38,13 @@ CARD_ID=$(builtin_card_id)
 if [ ! -f "$CORES_PATH/usb-audio" ] && [ -n "$CARD_ID" ]; then
 	export HOME="$XDG_CONFIG_HOME/home"
 	mkdir -p "$HOME"
+	# Only pick the card; keep the system's own default PCM chain (format /
+	# rate conversion, sharing) that the stock paks use. Opening hw:<card>
+	# through a plain plug failed now and then ("Couldn't set hardware audio
+	# parameters").
 	cat > "$HOME/.asoundrc" <<ASOUND
-pcm.!default {
-    type plug
-    slave.pcm "hw:$CARD_ID"
-}
-ctl.!default {
-    type hw
-    card $CARD_ID
-}
+defaults.pcm.card $CARD_ID
+defaults.ctl.card $CARD_ID
 ASOUND
 fi
 
