@@ -27,24 +27,25 @@ cd "$HOME"
 # card numbers the devices got, and NextUI's routing is left alone for the menu.
 # To hear the game through the M8 instead, create an empty file named
 # "usb-audio" in this pak's folder.
-builtin_card_id() { # id of the first sound card that isn't USB, e.g. "audiocodec"
+builtin_card() { # number of the first sound card that isn't USB
 	for dir in /proc/asound/card[0-9]*; do
 		[ -d "$dir" ] || continue
 		[ -e "$dir/usbid" ] && continue
-		cat "$dir/id" 2>/dev/null && return
+		echo "${dir##*/card}"
+		return
 	done
 }
-CARD_ID=$(builtin_card_id)
-if [ ! -f "$CORES_PATH/usb-audio" ] && [ -n "$CARD_ID" ]; then
+CARD=$(builtin_card)
+if [ ! -f "$CORES_PATH/usb-audio" ] && [ -n "$CARD" ]; then
 	export HOME="$XDG_CONFIG_HOME/home"
 	mkdir -p "$HOME"
 	# Only pick the card; keep the system's own default PCM chain (format /
 	# rate conversion, sharing) that the stock paks use. Opening hw:<card>
 	# through a plain plug failed now and then ("Couldn't set hardware audio
-	# parameters").
+	# parameters"). This ALSA only takes a card number here, not its name.
 	cat > "$HOME/.asoundrc" <<ASOUND
-defaults.pcm.card $CARD_ID
-defaults.ctl.card $CARD_ID
+defaults.pcm.card $CARD
+defaults.ctl.card $CARD
 ASOUND
 fi
 
