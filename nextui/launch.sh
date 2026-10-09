@@ -66,6 +66,18 @@ if [ -f "$XDG_CONFIG_HOME/alsa-diag" ]; then
 		done
 		ls -la /usr/share/alsa /usr/share/alsa/cards /usr/share/alsa/pcm /etc/alsa 2>&1 | head -60
 		[ -f /usr/share/alsa/pcm/default.conf ] && { echo "== pcm/default.conf"; cat /usr/share/alsa/pcm/default.conf; }
+		echo "== shared memory / semaphores (dmix)"; ipcs 2>&1
+		echo "== fuser"; for d in /dev/snd/pcmC*p; do echo "$d: $(fuser "$d" 2>&1)"; done
+		echo "== playback tests (0.5 s of silence each, same format as the game)"
+		if command -v aplay >/dev/null; then
+			for pcm in default Playback PlaybackDmix "plughw:$CARD,0" "hw:$CARD,0" sysdefault; do
+				out=$(dd if=/dev/zero bs=65536 count=1 2>/dev/null | aplay -q -D "$pcm" -f S16_LE -r 32768 -c 2 - 2>&1)
+				echo "[$pcm] exit=$? $out"
+			done
+			echo "-- with the system HOME ($USERDATA_PATH)"
+			out=$(dd if=/dev/zero bs=65536 count=1 2>/dev/null | HOME="$USERDATA_PATH" aplay -q -D default -f S16_LE -r 32768 -c 2 - 2>&1)
+			echo "[default, system HOME] exit=$? $out"
+		fi
 		echo "== aplay"; command -v aplay && { aplay -l 2>&1; aplay -L 2>&1 | head -40; }
 	} > "$DIAG" 2>&1
 	( sleep 6
