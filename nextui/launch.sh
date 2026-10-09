@@ -51,6 +51,7 @@ if [ ! -f "$CORES_PATH/usb-audio" ] && [ -n "$CARD" ]; then
 	# .asoundrc it watches changes, and this one doesn't).
 	if grep -qs '^pcm\.Playback[[:space:]]' /etc/asound.conf; then
 		export AUDIODEV=Playback
+		KEEP_SPEAKER=1
 		cat > "$HOME/.asoundrc" <<ASOUND
 pcm.!default {
 	type plug
@@ -103,7 +104,28 @@ if [ -f "$XDG_CONFIG_HOME/alsa-diag" ]; then
 	} > "$DIAG" 2>&1
 	( sleep 6
 	  echo "== while playing: open PCM streams" >> "$DIAG"
-	  for f in /proc/asound/card*/pcm*p/sub*/hw_params; do echo "$f:"; cat "$f"; done >> "$DIAG" 2>&1 ) &
+	  for f in /proc/asound/card*/pcm*p/sub*/hw_params; do echo "$f:"; cat "$f"; done >> "$DIAG" 2>&1
+	  { echo "== speaker mute: $(cat /sys/class/speaker/mute 2>&1)"
+	    amixer -c "$CARD" sget 'DAC volume'; amixer -c "$CARD" sget 'digital volume'; } >> "$DIAG" 2>&1 ) &
+fi
+
+# minarch mutes the speaker while it starts up and unmutes it when it sets the
+# volume, but while NextUI routes sound to a USB device (the M8) it sets the
+# volume on that device only, so the speaker stays muted (and the DAC volume can
+# be left at 0). Keep the speaker on while the game runs and the M8 is plugged
+# in. The volume buttons then still change the M8's volume, not the speaker's.
+if [ -n "$KEEP_SPEAKER" ]; then
+	(
+		LAUNCHER=$$
+		while kill -0 "$LAUNCHER" 2>/dev/null; do
+			if grep -qs 'type hw' "$USERDATA_PATH/.asoundrc"; then
+				[ "$(cat /sys/class/speaker/mute 2>/dev/null)" = 1 ] && echo 0 > /sys/class/speaker/mute
+				amixer -c "$CARD" sget 'DAC volume' 2>/dev/null | grep -q 'Front Left: 0 ' &&
+					amixer -q -c "$CARD" sset 'DAC volume' 160
+			fi
+			sleep 1
+		done
+	) &
 fi
 
 minarch.elf "$CORES_PATH/${EMU_EXE}_libretro.so" "$ROM" > "$LOGS_PATH/$EMU_TAG.txt" 2>&1
